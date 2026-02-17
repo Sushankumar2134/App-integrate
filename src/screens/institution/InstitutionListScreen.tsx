@@ -1,4 +1,4 @@
-import React, {useMemo, useState, useEffect} from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Alert,
   FlatList,
@@ -6,13 +6,13 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import axios from 'axios';
 
-import {Institution} from '../../types/institution';
-import {Block, Button, Input, Text} from '../../components';
-import {useTheme} from '../../hooks';
+import { Institution } from '../../types/institution';
+import { Block, Button, Input, Text } from '../../components';
+import { useTheme } from '../../hooks';
+import { clampRGBA } from 'react-native-reanimated/lib/typescript/Colors';
 
 interface InstitutionListScreenProps {
   navigation: any;
@@ -21,7 +21,7 @@ interface InstitutionListScreenProps {
 const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
   navigation,
 }) => {
-  const {colors, gradients, sizes} = useTheme();
+  const { colors, gradients, sizes } = useTheme();
 
   // ================= STATES =================
   const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -29,31 +29,36 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
   const [loading, setLoading] = useState(true);
 
   // ================= API URL =================
-
-  // For Android Emulator use: 10.0.2.2
-  // For Web/iOS use: 127.0.0.1
-
-  const API_URL ='http://192.168.86.188:8000/api/institutions';
+  const API_URL =
+    'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/institutions';
 
   // ================= FETCH DATA =================
-
   const fetchInstitutions = async () => {
     try {
       setLoading(true);
 
-      const response = await axios.get(API_URL,{'headers': {
-        'Content-Type': 'application/json',
-      }});
-console.log('API Response:', response);
-      // If API returns { data: [...] }
-      // Change below to: response.data.data
-      const data = Array.isArray(response.data) ? response.data : response.data.data;
+      const response = await axios.get(API_URL, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-      setInstitutions(data || []);
-      console.log('Fetched Institutions:', data);
+      const data = Array.isArray(response.data)
+        ? response.data
+        : response.data.data;
+        
+      const formattedData = data.map((item: any) => ({
+      id: item.id,
+      institutionName: item.name, // ✅ Fix name field
+      organizationId: item.organization_id,
+      institutionUrl: item.institution_url,
+      status: item.status === 1 ? 'Active' : 'Inactive', // ✅ Fix status
+      isDeleted: item.deleted_at !== null,
+    }));
+
+    setInstitutions(formattedData);
     } catch (error) {
       console.error(error);
-
       Alert.alert('Error', 'Unable to load institutions from server');
     } finally {
       setLoading(false);
@@ -61,29 +66,28 @@ console.log('API Response:', response);
   };
 
   // ================= ON LOAD =================
-
   useEffect(() => {
     fetchInstitutions();
   }, []);
 
   // ================= FILTERS =================
-
   const activeInstitutions = useMemo(() => {
-    return institutions.filter(inst => !inst.isDeleted);
+    return institutions.filter(inst => !inst?.isDeleted);
   }, [institutions]);
 
   const filteredInstitutions = useMemo(() => {
-    return activeInstitutions.filter(inst =>
-      inst.institutionName
+    return activeInstitutions.filter(inst => {
+      const name = inst?.institutionName || '';
+
+      return name
         .toLowerCase()
-        .includes(searchText.toLowerCase()),
-    );
+        .includes(searchText.toLowerCase());
+    });
   }, [activeInstitutions, searchText]);
 
   // ================= HANDLERS =================
-
   const handleAddInstitution = () => {
-    navigation.navigate('AddEditInstitution', {institution: null});
+    navigation.navigate('AddEditInstitution', { institution: null });
   };
 
   const handleDeletedInstitutions = () => {
@@ -91,7 +95,7 @@ console.log('API Response:', response);
   };
 
   const handleViewInstitution = (institution: Institution) => {
-    navigation.navigate('AddEditInstitution', {institution});
+    navigation.navigate('ViewInstitution', { institutionId: institution.id });
   };
 
   const handleEditInstitution = (institution: Institution) => {
@@ -102,11 +106,12 @@ console.log('API Response:', response);
   };
 
   // ================= TOGGLE STATUS =================
-
   const handleToggleStatus = async (institution: Institution) => {
     try {
       const newStatus =
-        institution.status === 'Active' ? 'Inactive' : 'Active';
+        String(institution.status) === 'Active'
+          ? 'Inactive'
+          : 'Active';
 
       await axios.put(`${API_URL}/${institution.id}`, {
         status: newStatus,
@@ -121,13 +126,12 @@ console.log('API Response:', response);
   };
 
   // ================= DELETE =================
-
   const handleDeleteInstitution = (institution: Institution) => {
     Alert.alert(
       'Delete Institution',
       `Are you sure you want to delete "${institution.institutionName}"?`,
       [
-        {text: 'Cancel', style: 'cancel'},
+        { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
@@ -149,11 +153,7 @@ console.log('API Response:', response);
   };
 
   // ================= RENDER ROW =================
-
-  const renderInstitutionRow = ({
-    item,
-    index,
-  }: {
+  const renderInstitutionRow = ({ item,index,}: {
     item: Institution;
     index: number;
   }) => (
@@ -163,41 +163,46 @@ console.log('API Response:', response);
           <Text style={styles.slNo}>{index + 1}</Text>
         </View>
 
-        <View style={[styles.column, {flex: 2}]}>
+        <View style={[styles.column, { flex: 2 }]}>
           <Text style={styles.cellText} numberOfLines={1}>
-            {item.institutionName}
+            
+            {item?.institutionName || 'N/A'}
           </Text>
         </View>
 
-        <View style={[styles.column, {flex: 1.5}]}>
+        <View style={[styles.column, { flex: 1.5 }]}>
           <Text style={styles.cellText} numberOfLines={1}>
-            {item.organizationId}
+            {item?.organizationId || 'N/A'}
           </Text>
         </View>
 
-        <View style={[styles.column, {flex: 1.5}]}>
+        <View style={[styles.column, { flex: 1.5 }]}>
           <Text style={styles.cellText} numberOfLines={1}>
-            {item.institutionUrl?.replace('https://', '')}
+            {item?.institutionUrl
+              ? item.institutionUrl.replace('https://', '')
+              : 'N/A'}
           </Text>
         </View>
 
-        <View style={[styles.column, {flex: 0.8}]}>
+        {/* ✅ SAFE STATUS */}
+        <View style={[styles.column, { flex: 0.8 }]}>
           <Text
             style={[
               styles.cellText,
               {
                 color:
-                  item.status === 'Active' ? '#4CAF50' : '#ff9800',
+                  String(item?.status) === 'Active'
+                    ? '#4CAF50'
+                    : '#ff9800',
                 fontWeight: '600',
               },
             ]}>
-            {item.status?.charAt(0)}
+            {String(item?.status ?? '-').charAt(0)}
           </Text>
         </View>
       </View>
 
       {/* ACTION BUTTONS */}
-
       <View style={styles.actionButtons}>
         <TouchableOpacity
           style={[styles.actionBtn, styles.viewBtn]}
@@ -215,7 +220,7 @@ console.log('API Response:', response);
           style={[styles.actionBtn, styles.toggleBtn]}
           onPress={() => handleToggleStatus(item)}>
           <Text style={styles.actionBtnText}>
-            {item.status === 'Active' ? 'Deact.' : 'Act.'}
+            {String(item?.status) === 'Active' ? 'Deact.' : 'Act.'}
           </Text>
         </TouchableOpacity>
 
@@ -229,24 +234,24 @@ console.log('API Response:', response);
   );
 
   // ================= UI =================
-
   return (
-    <Block safe style={[styles.container, {backgroundColor: colors.background}]}>
-      {/* HEADER */}
+    <Block
+      safe
+      style={[styles.container, { backgroundColor: colors.background }]}>
 
+      {/* HEADER */}
       <View
         style={[
           styles.header,
-          {backgroundColor: colors.card, borderBottomColor: colors.light},
+          { backgroundColor: colors.card, borderBottomColor: colors.light },
         ]}>
-        <Text style={[styles.title, {color: colors.text}]}>
+        <Text style={[styles.title, { color: colors.text }]}>
           Institutions
         </Text>
       </View>
 
       {/* SEARCH */}
-
-      <View style={[styles.searchContainer, {backgroundColor: colors.card}]}>
+      <View style={[styles.searchContainer, { backgroundColor: colors.card }]}>
         <Input
           placeholder="Search by Institution Name..."
           value={searchText}
@@ -256,7 +261,6 @@ console.log('API Response:', response);
       </View>
 
       {/* BUTTONS */}
-
       <View style={styles.addButtonContainer}>
         <View style={styles.buttonRow}>
           <Button
@@ -280,28 +284,26 @@ console.log('API Response:', response);
       </View>
 
       {/* TABLE HEADER */}
-
       <View style={styles.tableHeader}>
-        <Text style={[styles.headerCell, {flex: 0.5}]}>Sl</Text>
-        <Text style={[styles.headerCell, {flex: 2}]}>Institution</Text>
-        <Text style={[styles.headerCell, {flex: 1.5}]}>Organization</Text>
-        <Text style={[styles.headerCell, {flex: 1.5}]}>Website</Text>
-        <Text style={[styles.headerCell, {flex: 0.8}]}>Status</Text>
+        <Text style={[styles.headerCell, { flex: 0.5 }]}>Sl</Text>
+        <Text style={[styles.headerCell, { flex: 2 }]}>Institution</Text>
+        <Text style={[styles.headerCell, { flex: 1.5 }]}>Organization</Text>
+        <Text style={[styles.headerCell, { flex: 1.5 }]}>Website</Text>
+        <Text style={[styles.headerCell, { flex: 0.8 }]}>Status</Text>
       </View>
 
       {/* LIST */}
-
       {loading ? (
         <ActivityIndicator
           size="large"
           color={colors.primary}
-          style={{marginTop: 30}}
+          style={{ marginTop: 30 }}
         />
       ) : filteredInstitutions.length > 0 ? (
         <FlatList
           data={filteredInstitutions}
           renderItem={renderInstitutionRow}
-          keyExtractor={item => item.id.toString()}
+          keyExtractor={item => String(item.id)}
           contentContainerStyle={styles.listContent}
         />
       ) : (
@@ -311,7 +313,6 @@ console.log('API Response:', response);
       )}
 
       {/* FOOTER */}
-
       <View style={styles.footerInfo}>
         <Text style={styles.infoText}>
           Total: {filteredInstitutions.length} of{' '}
@@ -323,11 +324,8 @@ console.log('API Response:', response);
 };
 
 // ================= STYLES =================
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
 
   header: {
     padding: 16,
@@ -339,22 +337,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  searchContainer: {
-    padding: 16,
-  },
+  searchContainer: { padding: 16 },
 
-  addButtonContainer: {
-    padding: 16,
-  },
+  addButtonContainer: { padding: 16 },
 
   buttonRow: {
     flexDirection: 'row',
     gap: 12,
   },
 
-  buttonHalf: {
-    flex: 1,
-  },
+  buttonHalf: { flex: 1 },
 
   tableHeader: {
     flexDirection: 'row',
@@ -401,9 +393,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  cellText: {
-    fontSize: 12,
-  },
+  cellText: { fontSize: 12 },
 
   actionButtons: {
     flexDirection: 'row',
@@ -420,21 +410,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  viewBtn: {
-    backgroundColor: '#e3f2fd',
-  },
-
-  editBtn: {
-    backgroundColor: '#f3e5f5',
-  },
-
-  toggleBtn: {
-    backgroundColor: '#e8f5e9',
-  },
-
-  deleteBtn: {
-    backgroundColor: '#ffebee',
-  },
+  viewBtn: { backgroundColor: '#e3f2fd' },
+  editBtn: { backgroundColor: '#f3e5f5' },
+  toggleBtn: { backgroundColor: '#e8f5e9' },
+  deleteBtn: { backgroundColor: '#ffebee' },
 
   actionBtnText: {
     fontSize: 11,

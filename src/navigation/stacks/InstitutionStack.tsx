@@ -3,6 +3,7 @@ import {createStackNavigator} from '@react-navigation/stack';
 import InstitutionListScreen from '../../screens/institution/InstitutionListScreen';
 import AddEditInstitutionScreen from '../../screens/institution/AddEditInstitutionScreen';
 import DeletedInstitutionScreen from '../../screens/institution/DeletedInstitutionScreen';
+import ViewInstitutionScreen from '../../screens/institution/ViewInstitutionScreen';
 
 const Stack = createStackNavigator();
 
@@ -32,6 +33,13 @@ const InstitutionStack: React.FC = () => {
         component={DeletedInstitutionScreen}
         options={{
           title: 'Deleted Institutions',
+        }}
+      />
+      <Stack.Screen
+        name="ViewInstitution"
+        component={ViewInstitutionScreen}
+        options={{
+          title: 'Institution Details',
         }}
       />
     </Stack.Navigator>

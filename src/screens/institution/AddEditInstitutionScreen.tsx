@@ -8,6 +8,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import axios from 'axios';
 import {Institution} from '../../types/institution';
 import {institutionMockData} from '../../data/institutionMockData';
 import {Block, Modal, Switch, Text} from '../../components';
@@ -105,6 +106,10 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
   } | null>(null);
 
   const [modulesModal, setModulesModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const API_URL =
+    'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/institutions';
 
   const handleInputChange = (field: keyof Institution, value: string) => {
     setFormData({...formData, [field]: value});
@@ -124,7 +129,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (
       !formData.institutionName ||
       !formData.institutionCode ||
@@ -134,21 +139,95 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
       return;
     }
 
-    Alert.alert(
-      'Success',
-      isEditMode
-        ? 'Institution updated successfully!'
-        : 'Institution added successfully!',
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ],
-    );
+    try {
+      setLoading(true);
+
+      // Transform camelCase to snake_case for API
+      const apiData = {
+        name: formData.institutionName,
+        code: formData.institutionCode,
+        organization_id: formData.organizationId,
+        gst_number: formData.gst,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        pincode: formData.pincode,
+        contact_number: formData.contactNumber,
+        email: formData.email,
+        timezone: formData.timeZone,
+        institution_url: formData.institutionUrl,
+        login_template: formData.loginTemplate,
+        logo: formData.logo,
+        default_language: formData.defaultLanguage,
+        admin_name: formData.adminName,
+        admin_email: formData.adminEmail,
+        admin_mobile: formData.adminMobile,
+        role: formData.role,
+        status: formData.status === 'Active' ? 1 : 0,
+        mou_copy: formData.mouCopy,
+        po_number: formData.poNumber,
+        po_start_date: formData.poStartDate,
+        po_end_date: formData.poEndDate,
+        subscription_plan: formData.subscriptionPlan,
+        modules: formData.modules,
+        invoice_type: formData.invoiceType,
+        invoice_frequency: formData.invoiceFrequency,
+        payment_mode: formData.paymentMode,
+        invoice_amount: formData.invoiceAmount,
+        payment_status: formData.paymentStatus,
+        payment_received: formData.paymentReceived,
+        payment_date: formData.paymentDate,
+        transaction_reference: formData.transactionReference,
+        poc_name: formData.pocName,
+        poc_email: formData.pocEmail,
+        poc_contact: formData.pocContact,
+        support_sla: formData.supportSLA,
+      };
+
+      if (isEditMode && formData.id) {
+        // Update existing institution
+        await axios.put(`${API_URL}/${formData.id}`, apiData, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        Alert.alert('Success', 'Institution updated successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      } else {
+        // Create new institution
+        await axios.post(API_URL, apiData, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        Alert.alert('Success', 'Institution added successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error('Error saving institution:', error);
+      Alert.alert(
+        'Error',
+        'Failed to save institution. Please try again.',
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = () => {
+    if (loading) {
+      Alert.alert('Please wait', 'Request is in progress...');
+      return;
+    }
     Alert.alert('Cancel', 'Discard changes?', [
       {text: 'Keep', style: 'cancel'},
       {
@@ -557,6 +636,8 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           <PrimaryButton
             title="Save"
             onPress={handleSave}
+            loading={loading}
+            disabled={loading}
             style={{flex: 1}}
           />
           <PrimaryButton
@@ -564,6 +645,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
             onPress={handleCancel}
             variant="danger"
             style={{flex: 1, marginLeft: 10}}
+            disabled={loading}
           />
         </View>
       </ScrollView>
