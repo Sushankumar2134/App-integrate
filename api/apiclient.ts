@@ -1,4 +1,4 @@
-export default   'http://192.168.86.188:8000/api';
+export default   'https://tamala-unsighing-quadrennially.ngrok-free.dev/api';
 
 
 export const endpoint={

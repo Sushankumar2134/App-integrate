@@ -1,7 +1,13 @@
-import React, {useMemo} from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
+import React, {useEffect, useMemo, useState} from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import {SystemModule} from '../../types/modules';
-import {moduleMockData} from '../../data/moduleMockData';
+import {fetchmoduleById, fetchmodules} from '../../../api/module';
 import {Block, Button, Text} from '../../components';
 import {useTheme} from '../../hooks';
 
@@ -9,7 +15,7 @@ interface ViewModuleScreenProps {
   navigation?: any;
   route?: {
     params?: {
-      module?: SystemModule;
+      moduleId?: string;
       onSave?: (module: SystemModule) => void;
     };
   };
@@ -20,7 +26,90 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
   route,
 }) => {
   const {colors, gradients} = useTheme();
-  const {module, onSave} = route?.params || {};
+  const {moduleId, onSave} = route?.params || {};
+  const [module, setModule] = useState<SystemModule | null>(null);
+  const [modules, setModules] = useState<SystemModule[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const normalizeModule = (raw: any): SystemModule => {
+    const typeRaw = String(raw.type ?? raw.module_type ?? '').toLowerCase();
+    const type: SystemModule['type'] =
+      typeRaw === 'web' || typeRaw === 'app' || typeRaw === 'both'
+        ? (typeRaw as SystemModule['type'])
+        : 'both';
+
+    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? 'Institution';
+    const accessFor: SystemModule['accessFor'] =
+      String(accessRaw).toLowerCase().includes('service') ? 'Service' : 'Institution';
+
+    const parentId = raw.parent_module ?? raw.parent_module_id ?? raw.parentModuleId;
+    const isActiveValue = raw.is_active ?? raw.isActive ?? raw.status;
+    const isActive =
+      typeof isActiveValue === 'number'
+        ? isActiveValue === 1
+        : typeof isActiveValue === 'string'
+        ? isActiveValue.toLowerCase() === 'active' || isActiveValue === '1'
+        : !!isActiveValue;
+
+    return {
+      id: String(raw.id ?? ''),
+      moduleLabel: raw.module_label ?? raw.moduleLabel ?? '',
+      displayName:
+        raw.module_display_name ?? raw.display_name ?? raw.displayName ?? '',
+      parentModuleId:
+        parentId === null || parentId === undefined ? null : String(parentId),
+      priority: Number(raw.priority ?? 0),
+      icon: raw.icon ?? '',
+      fileUrl: raw.file_url ?? raw.fileUrl ?? '',
+      pageName: raw.page_name ?? raw.pageName ?? '',
+      type,
+      accessFor,
+      isActive,
+    };
+  };
+
+  useEffect(() => {
+    const loadModule = async () => {
+      try {
+        setLoading(true);
+        const [moduleResponse, modulesResponse] = await Promise.all([
+          fetchmoduleById(String(moduleId)),
+          fetchmodules(),
+        ]);
+
+        const rawModule = moduleResponse?.data ?? moduleResponse;
+        const rawList = modulesResponse?.data ?? modulesResponse ?? [];
+        const list = Array.isArray(rawList) ? rawList : [];
+
+        setModules(list.map(normalizeModule));
+        setModule(rawModule ? normalizeModule(rawModule) : null);
+      } catch (error) {
+        console.error('Error fetching module:', error);
+        Alert.alert('Error', 'Failed to load module details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!moduleId) {
+      setLoading(false);
+      setModule(null);
+      setModules([]);
+      return;
+    }
+
+    loadModule();
+  }, [moduleId]);
+
+  if (loading) {
+    return (
+      <Block safe style={[styles.container, {backgroundColor: colors.background}]}> 
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </Block>
+    );
+  }
 
   if (!module) {
     return (
@@ -40,12 +129,12 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
 
   const parentModule = useMemo(() => {
     if (module.parentModuleId === null) return null;
-    return moduleMockData.find((m) => m.id === module.parentModuleId);
-  }, [module.parentModuleId]);
+    return modules.find((m) => m.id === module.parentModuleId);
+  }, [module.parentModuleId, modules]);
 
   const childModules = useMemo(() => {
-    return moduleMockData.filter((m) => m.parentModuleId === module.id);
-  }, [module.id]);
+    return modules.filter((m) => m.parentModuleId === module.id);
+  }, [module.id, modules]);
 
   const handleEdit = () => {
     navigation.navigate('AddEditModule', {
@@ -348,5 +437,10 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     marginBottom: 24,
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

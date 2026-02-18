@@ -8,7 +8,7 @@ const Stack = createStackNavigator();
 
 const OrganizationStack: React.FC = () => {
   return (
-    <Stack.Navigator screenOptions={{headerShown: false}}>
+    <Stack.Navigator>
       <Stack.Screen
         name="OrganizationList"
         component={OrganizationListScreen}

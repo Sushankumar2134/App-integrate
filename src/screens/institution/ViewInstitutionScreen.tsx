@@ -506,6 +506,7 @@ const styles = StyleSheet.create({
 
   actionButton: {
     flex: 1,
+    marginBottom:10
   },
 
   loadingContainer: {

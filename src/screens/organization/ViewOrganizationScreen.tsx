@@ -1,5 +1,6 @@
-import React from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
+import React, {useEffect, useState} from 'react';
+import {ScrollView, StyleSheet, View, ActivityIndicator, Alert} from 'react-native';
+import axios from 'axios';
 import {Block, Text} from '../../components';
 import PrimaryButton from '../../components/PrimaryButton';
 import {Organization} from '../../types/organization';
@@ -15,7 +16,78 @@ const ViewOrganizationScreen: React.FC<ViewOrganizationScreenProps> = ({
   route,
 }) => {
   const {colors} = useTheme();
-  const {organization} = route.params || {};
+  const {organizationId} = route.params || {};
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const API_URL = 'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/organizations';
+
+  useEffect(() => {
+    const fetchOrganization = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`${API_URL}/${organizationId}`);
+        
+        const org = response.data?.data || response.data;
+        
+        const transformed: Organization = {
+          id: org.id,
+          organizationName: org.name || '',
+          organizationType: org.type || '',
+          registrationNumber: org.registration_number || '',
+          gst: org.gst_number || '',
+          address: org.address || '',
+          city: org.city || '',
+          state: org.state || '',
+          country: org.country || '',
+          pincode: org.pincode || '',
+          contactNumber: org.contact_number || '',
+          email: org.email || '',
+          timeZone: org.timezone || '',
+          organizationUrl: org.organization_url || '',
+          institutionUrlSame: org.institution_url_same || false,
+          softwareWebsiteUrl: org.software_website_url || '',
+          loginTemplate: org.login_template || 'Standard',
+          logo: org.logo || '',
+          defaultLanguage: org.default_language || 'English',
+          adminName: org.admin_name || '',
+          adminEmail: org.admin_email || '',
+          adminMobile: org.admin_mobile || '',
+          status: org.status === 1 ? 'Active' : 'Inactive',
+          mouCopy: org.mou_copy || '',
+          poNumber: org.po_number || '',
+          poStartDate: org.po_start_date || '',
+          poEndDate: org.po_end_date || '',
+          subscriptionPlan: org.subscription_plan || 'Standard',
+          enabledModules: org.enabled_modules || [],
+          invoiceType: org.invoice_type || '',
+          invoiceFrequency: org.invoice_frequency || '',
+          paymentMode: org.payment_mode || '',
+          invoiceAmount: org.invoice_amount || '',
+          paymentStatus: org.payment_status || '',
+          paymentReceived: org.payment_received || false,
+          paymentDate: org.payment_date || '',
+          transactionReference: org.transaction_reference || '',
+          pocName: org.poc_name || '',
+          pocEmail: org.poc_email || '',
+          pocContact: org.poc_contact || '',
+          supportSLA: org.support_sla || '',
+          // isDeleted: !!org.deleted_at,
+        };
+        
+        setOrganization(transformed);
+      } catch (error) {
+        console.error('Error fetching organization:', error);
+        Alert.alert('Error', 'Failed to load organization details');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (organizationId) {
+      fetchOrganization();
+    }
+  }, [organizationId]);
 
   const renderField = (label: string, value?: string | boolean | string[]) => (
     <View style={styles.fieldRow}>
@@ -44,7 +116,12 @@ const ViewOrganizationScreen: React.FC<ViewOrganizationScreenProps> = ({
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : organization ? (
+        <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Master Details</Text>
           {renderField('Organization Name', organization?.organizationName)}
@@ -128,6 +205,11 @@ const ViewOrganizationScreen: React.FC<ViewOrganizationScreenProps> = ({
           />
         </View>
       </ScrollView>
+      ) : (
+        <View style={styles.loadingContainer}>
+          <Text style={styles.emptyText}>Failed to load organization</Text>
+        </View>
+      )}
     </Block>
   );
 };
@@ -182,6 +264,15 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     marginTop: 16,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    color: '#999',
+    fontSize: 16,
   },
 });
 

@@ -8,7 +8,7 @@ const Stack = createStackNavigator();
 
 const ModuleStack = () => {
   return (
-    <Stack.Navigator screenOptions={{headerShown: false}}>
+    <Stack.Navigator>
       <Stack.Screen name="ModuleList" component={ModuleListScreen} />
       <Stack.Screen name="AddEditModule" component={AddEditModuleScreen} />
       <Stack.Screen name="ViewModule" component={ViewModuleScreen} />

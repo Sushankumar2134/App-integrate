@@ -9,11 +9,7 @@ const Stack = createStackNavigator();
 
 const InstitutionStack: React.FC = () => {
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-
-      }}>
+    <Stack.Navigator>
       <Stack.Screen
         name="InstitutionList"
         component={InstitutionListScreen}

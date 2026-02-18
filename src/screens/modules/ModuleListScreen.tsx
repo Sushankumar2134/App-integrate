@@ -1,7 +1,15 @@
-import React, {useMemo, useState} from 'react';
-import {FlatList, ScrollView, StyleSheet, TouchableOpacity, View} from 'react-native';
+import React, {useEffect, useMemo, useState} from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import {SystemModule} from '../../types/modules';
-import {moduleMockData} from '../../data/moduleMockData';
+import {fetchmodules} from '../../../api/module';
 import {Block, Button, Input, Text} from '../../components';
 import {useTheme} from '../../hooks';
 
@@ -13,9 +21,71 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
   navigation,
 }) => {
   const {colors, gradients, sizes} = useTheme();
-  const [modules, setModules] = useState<SystemModule[]>(moduleMockData);
+  const [modules, setModules] = useState<SystemModule[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter] = useState<'Institution' | 'Service'>('Institution');
+  const [loading, setLoading] = useState(true);
+
+  const normalizeModule = (raw: any): SystemModule => {
+    const typeRaw = String(raw.type ?? raw.module_type ?? '').toLowerCase();
+    const type: SystemModule['type'] =
+      typeRaw === 'web' || typeRaw === 'app' || typeRaw === 'both'
+        ? (typeRaw as SystemModule['type'])
+        : 'both';
+
+    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? 'Institution';
+    const accessFor: SystemModule['accessFor'] =
+      String(accessRaw).toLowerCase().includes('service') ? 'Service' : 'Institution';
+
+    const parentId = raw.parent_module ?? raw.parent_module_id ?? raw.parentModuleId;
+    const isActiveValue = raw.is_active ?? raw.isActive ?? raw.status;
+    const isActive =
+      typeof isActiveValue === 'number'
+        ? isActiveValue === 1
+        : typeof isActiveValue === 'string'
+        ? isActiveValue.toLowerCase() === 'active' || isActiveValue === '1'
+        : !!isActiveValue;
+
+    return {
+      id: String(raw.id ?? ''),
+      moduleLabel: raw.module_label ?? raw.moduleLabel ?? '',
+      displayName:
+        raw.module_display_name ?? raw.display_name ?? raw.displayName ?? '',
+      parentModuleId:
+        parentId === null || parentId === undefined ? null : String(parentId),
+      priority: Number(raw.priority ?? 0),
+      icon: raw.icon ?? '',
+      fileUrl: raw.file_url ?? raw.fileUrl ?? '',
+      pageName: raw.page_name ?? raw.pageName ?? '',
+      type,
+      accessFor,
+      isActive,
+    };
+  };
+
+  const loadModules = async () => {
+    try {
+      setLoading(true);
+      const response = await fetchmodules();
+      const list = response?.data ?? response ?? [];
+      console.log('Raw modules response:', response);
+      if (!Array.isArray(list)) {
+        console.log('Invalid modules response:', response);
+        return;
+      }
+
+      setModules(list.map(normalizeModule));
+    } catch (error) {
+      console.error('Error fetching modules:', error);
+      Alert.alert('Error', 'Failed to load modules');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadModules();
+  }, []);
 
   const filteredModules = useMemo(() => {
     return modules
@@ -60,12 +130,7 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
 
   const handleView = (module: SystemModule) => {
     navigation.navigate('ViewModule', {
-      module,
-      onSave: (updatedModule: SystemModule) => {
-        setModules((prev) =>
-          prev.map((m) => (m.id === updatedModule.id ? updatedModule : m)),
-        );
-      },
+      moduleId: module.id,
     });
   };
 
@@ -134,6 +199,16 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
       </View>
     </View>
   );
+
+  if (loading) {
+    return (
+      <Block safe style={[styles.container, {backgroundColor: colors.background}]}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      </Block>
+    );
+  }
 
   return (
     <Block safe style={[styles.container, {backgroundColor: colors.background}]}>
@@ -366,5 +441,10 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#999',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
