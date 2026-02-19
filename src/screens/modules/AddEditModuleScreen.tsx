@@ -50,7 +50,7 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
           moduleLabel: '',
           displayName: '',
           parentModuleId: null,
-          priority: 1,
+          priority: 0,
           icon: '',
           fileUrl: '',
           pageName: '',
@@ -412,7 +412,12 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
             label="Priority *"
             placeholder="e.g., 1"
             value={String(formData.priority)}
-            onChangeText={(text: string) => updateField('priority', Number(text) || 1)}
+            onChangeText={(text: string) => {
+              const num = text === '' ? 0 : Number(text);
+              if (!isNaN(num)) {
+                updateField('priority', num);
+              }
+            }}
             keyboardType="numeric"
             marginBottom={sizes.sm}
           />

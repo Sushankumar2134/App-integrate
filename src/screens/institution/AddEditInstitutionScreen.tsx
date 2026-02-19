@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import {AxiosError} from 'axios';
 import {Institution} from '../../types/institution';
 import {Block, Modal, Switch, Text} from '../../components';
@@ -188,8 +189,9 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
             poStartDate: data.po_start_date || '',
             poEndDate: data.po_end_date || '',
             subscriptionPlan: data.subscription_plan || 'Basic',
-            modules: data.modules || [],
-            invoiceType: data.invoice_type || 'Monthly',
+modules: (data.modules || []).map((m: any) => m.id), // ✅ CORRECT
+invoiceType: data.invoice_type || 'Monthly',
+
             invoiceFrequency: data.invoice_frequency || 'Monthly',
             paymentMode: data.payment_mode || 'Bank Transfer',
             invoiceAmount: data.invoice_amount || '0.02',
@@ -234,18 +236,53 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
     setFormData({...formData, [field]: value});
   };
 
-  const handleModuleToggle = (module: string) => {
-    if (formData.modules.includes(module)) {
+  const handleModuleToggle = (moduleId: string) => {
+    if (formData.modules.includes(moduleId)) {
       setFormData({
         ...formData,
-        modules: formData.modules.filter(m => m !== module),
+        modules: formData.modules.filter(m => m !== moduleId),
       });
     } else {
       setFormData({
         ...formData,
-        modules: [...formData.modules, module],
+        modules: [...formData.modules, moduleId],
       });
     }
+  };
+
+  const handleApiError = (error: any) => {
+    if (error instanceof AxiosError) {
+      const status = error.response?.status;
+      const data = error.response?.data;
+      if (status === 422) {
+        let message = 'Validation failed. Please check the required fields.';
+        if (data) {
+          if (typeof data === 'string') {
+            message = data;
+          } else if (typeof data?.message === 'string') {
+            message = data.message;
+          } else if (data?.errors && typeof data.errors === 'object') {
+            const firstKey = Object.keys(data.errors)[0];
+            const firstValue = firstKey ? data.errors[firstKey] : undefined;
+            if (Array.isArray(firstValue) && firstValue.length > 0) {
+              message = String(firstValue[0]);
+            } else if (typeof firstValue === 'string') {
+              message = firstValue;
+            }
+          }
+        }
+        Alert.alert('Validation Error', message);
+        return;
+      }
+
+      const message =
+        (typeof data?.message === 'string' && data.message) ||
+        'Failed to save institution';
+      Alert.alert('Error', message);
+      return;
+    }
+
+    Alert.alert('Error', 'An unexpected error occurred');
   };
 
   const handleSave = async () => {
@@ -289,7 +326,13 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         po_start_date: convertDateToAPI(formData.poStartDate),
         po_end_date: convertDateToAPI(formData.poEndDate),
         subscription_plan: formData.subscriptionPlan,
-        modules: formData.modules,
+
+modules: formData.modules.map((m: any) =>
+    typeof m === 'string' ? m : m.id
+  ),
+
+
+        
         invoice_type: formData.invoiceType,
         invoice_frequency: formData.invoiceFrequency,
         payment_mode: formData.paymentMode,
@@ -302,11 +345,14 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         poc_email: formData.pocEmail,
         poc_contact: formData.pocContact,
         support_sla: formData.supportSLA,
+
+        
       };
 
       if (isEditMode && institutionId) {
         // Update existing institution
-        console.log('Updating institution:', institutionId, apiData);
+        console.log('Updating institution:', institutionId);
+        console.log('Modules being sent:', formData.modules);
         await updateInstitution(institutionId, apiData);
         
         // Call onSave callback before navigation
@@ -324,7 +370,8 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         ]);
       } else {
         // Create new institution
-        console.log('Creating new institution:', apiData);
+        console.log('Creating new institution');
+        console.log('Modules being sent:', formData.modules);
         await createInstitution(apiData);
         
         // Call onSave callback before navigation
@@ -343,8 +390,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
       }
     } catch (error) {
       console.error('Error saving institution:', error);
-      const errorMessage = getErrorMessage(error);
-      Alert.alert('Error', errorMessage);
+      handleApiError(error);
     } finally {
       setLoading(false);
     }
@@ -380,18 +426,10 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
   };
 
   const formatDateInput = (text: string, field: keyof Institution) => {
-    // Remove non-numeric characters
-    const cleaned = text.replace(/[^0-9]/g, '');
+    // Allow numbers, -, and / characters only
+    const cleaned = text.replace(/[^0-9\-\/]/g, '');
     
-    let formatted = cleaned;
-    if (cleaned.length >= 2) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
-    }
-    if (cleaned.length >= 4) {
-      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2, 4) + '/' + cleaned.slice(4, 8);
-    }
-    
-    handleInputChange(field, formatted);
+    handleInputChange(field, cleaned);
   };
 
   const pickImage = async () => {
@@ -416,6 +454,22 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
     } catch (error) {
       console.error('Error picking image:', error);
       Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const pickDocument = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: '*/*',
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        handleInputChange('mouCopy', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document');
     }
   };
 
@@ -497,22 +551,31 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
             Select Modules
           </Text>
           <FlatList
-            data={MODULES}
+            data={availableModules}
             style={[styles.modalList, {maxHeight: modalMaxHeight}]}
             contentContainerStyle={styles.modalListContent}
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
-            renderItem={({item}) => (
-              <View style={styles.moduleItem}>
-                <Text style={styles.moduleLabel}>{item}</Text>
-                <Switch
-                  checked={formData.modules.includes(item)}
-                  onPress={() => handleModuleToggle(item)}
-                />
-              </View>
-            )}
-            keyExtractor={(item, index) => index.toString()}
+            renderItem={({item}) => {
+              const moduleName = item.module_label || item.module_display_name || item.display_name || '';
+              const moduleId = item.id?.toString() || '';
+              return (
+                <View style={styles.moduleItem}>
+                  <Text style={styles.moduleLabel}>{moduleName}</Text>
+                  <Switch
+                    checked={formData.modules.includes(moduleId)}
+                    onPress={() => handleModuleToggle(moduleId)}
+                  />
+                </View>
+              );
+            }}
+            keyExtractor={(item, index) => item.id?.toString() || index.toString()}
           />
+          <TouchableOpacity
+            style={[styles.modalCloseButton, {backgroundColor: colors.primary}]}
+            onPress={() => setModulesModal(false)}>
+            <Text style={styles.modalCloseButtonText}>Done</Text>
+          </TouchableOpacity>
         </View>
       </Modal>
     );
@@ -740,22 +803,25 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         />
         <FormInput
           label="Role"
-          placeholder="Select role"
+          placeholder="Enter role"
           value={formData.role}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() => {
-            const moduleNames = availableModules.map(mod => mod.displayName || mod.name || '');
-            openPicker('role', moduleNames.length > 0 ? moduleNames : ['Database', 'Out Patient Department']);
-          }}
+          onChangeText={value => handleInputChange('role', value)}
         />
-        <TouchableOpacity
-          style={styles.modulesButton}
-          onPress={() => setModulesModal(true)}>
-          <Text style={styles.modulesButtonText}>
-            Select Modules * ({formData.modules.length} selected)
-          </Text>
-        </TouchableOpacity>
+        <View style={{marginBottom: 16}}>
+          <Text style={{fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#333'}}>Modules *</Text>
+          <TouchableOpacity
+            style={styles.modulesButton}
+            onPress={() => setModulesModal(true)}>
+            <Text style={styles.modulesButtonText}>
+              {formData.modules.length > 0
+                ? availableModules
+                    .filter(m => formData.modules.includes(m.id?.toString()))
+                    .map(m => m.module_label || m.module_display_name || '')
+                    .join(', ')
+                : 'Select Modules'}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <FormInput
           label="Status *"
           placeholder="Select status"
@@ -795,13 +861,24 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           isPickerInput
           onPress={() => openPicker('subscriptionPlan', SUBSCRIPTION_PLANS)}
         />
-        <TouchableOpacity
-          style={styles.modulesButton}
-          onPress={() => setModulesModal(true)}>
-          <Text style={styles.modulesButtonText}>
-            Select Modules * ({formData.modules.length} selected)
-          </Text>
-        </TouchableOpacity>
+        {/* MOU Copy Document Picker */}
+        <View style={{marginBottom: 16}}>
+          <Text style={{fontSize: 14, fontWeight: '600', marginBottom: 8, color: '#333'}}>MOU Copy</Text>
+          <TouchableOpacity
+            style={styles.imagePickerButton}
+            onPress={pickDocument}>
+            {formData.mouCopy ? (
+              <View style={styles.imagePreviewContainer}>
+                <Text style={{fontSize: 12, color: '#007AFF', fontWeight: '600'}}>✓ Document Selected</Text>
+                <Text style={{fontSize: 11, color: '#666', marginTop: 4}} numberOfLines={1}>
+                  {formData.mouCopy.split('/').pop()}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.imagePickerText}>Choose MOU Copy File</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* SECTION 5: Billing & Payment */}
         {renderSectionTitle('Billing & Payment')}
