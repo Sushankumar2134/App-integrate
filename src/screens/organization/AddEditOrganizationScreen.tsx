@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   ScrollView,
@@ -9,9 +10,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {Organization} from '../../types/organization';
+import {
+  createOrganization,
+  updateOrganization,
+  
+} from '../../../api/organisation';
 import FormInput from '../../components/FormInput';
 import PrimaryButton from '../../components/PrimaryButton';
-import {Block, Modal, Switch, Text} from '../../components';
+import {Block, Modal, Text} from '../../components';
 import {useTheme} from '../../hooks';
 
 interface AddEditOrganizationScreenProps {
@@ -26,16 +32,6 @@ const ORG_TYPES: Organization['organizationType'][] = [
 ];
 const STATUSES: Organization['status'][] = ['Active', 'Inactive'];
 const PLANS: Organization['subscriptionPlan'][] = ['Basic', 'Standard', 'Premium'];
-const PAYMENT_STATUSES: Organization['paymentStatus'][] = [
-  'Pending',
-  'Partial',
-  'Paid',
-];
-const TIMEZONES = ['IST (UTC+5:30)', 'UTC', 'EST (UTC-5)'];
-const LANGUAGES = ['English', 'Hindi', 'Marathi', 'Tamil', 'Telugu'];
-const INVOICE_TYPES = ['Monthly', 'Quarterly', 'Annual'];
-const PAYMENT_MODES = ['Bank Transfer', 'Check', 'Online', 'Card'];
-const MODULES = ['OPD', 'IPD', 'Laboratory', 'Pharmacy', 'Billing', 'HIS'];
 
 const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
   navigation,
@@ -62,7 +58,7 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       email: '',
       timeZone: 'IST (UTC+5:30)',
       organizationUrl: '',
-      institutionUrlSame: true,
+      institutionUrlSame: false,
       softwareWebsiteUrl: '',
       loginTemplate: 'Standard',
       logo: '',
@@ -77,11 +73,11 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       poEndDate: '',
       subscriptionPlan: 'Standard',
       enabledModules: [],
-      invoiceType: 'Monthly',
-      invoiceFrequency: 'Monthly',
-      paymentMode: 'Bank Transfer',
+      invoiceType: '',
+      invoiceFrequency: '',
+      paymentMode: '',
       invoiceAmount: '',
-      paymentStatus: 'Pending',
+      paymentStatus: '',
       paymentReceived: false,
       paymentDate: '',
       transactionReference: '',
@@ -89,6 +85,7 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       pocEmail: '',
       pocContact: '',
       supportSLA: '',
+      isDeleted: false,
     },
   );
 
@@ -96,39 +93,83 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
     field: keyof Organization;
     options: string[];
   } | null>(null);
-  const [modulesModal, setModulesModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const getErrorMessage = (error: unknown) => {
+    const err = error as any;
+    return (
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.message ||
+      'Failed to save organization'
+    );
+  };
 
   const updateField = (field: keyof Organization, value: any) => {
     setFormData(prev => ({...prev, [field]: value}));
   };
 
-  const toggleModule = (module: string) => {
-    setFormData(prev => {
-      const exists = prev.enabledModules.includes(module);
-      return {
-        ...prev,
-        enabledModules: exists
-          ? prev.enabledModules.filter(item => item !== module)
-          : [...prev.enabledModules, module],
-      };
-    });
-  };
-
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.organizationName || !formData.email) {
-      Alert.alert('Validation Error', 'Please fill required fields.');
+      Alert.alert('Validation Error', 'Please fill in Organization Name and Email.');
       return;
     }
 
-    if (onSave) {
-      onSave(formData);
+    if (!formData.subscriptionPlan) {
+      Alert.alert('Validation Error', 'Please select a Subscription Plan.');
+      return;
     }
 
-    Alert.alert(
-      'Success',
-      isEditMode ? 'Organization updated.' : 'Organization added.',
-      [{text: 'OK', onPress: () => navigation.goBack()}],
-    );
+    try {
+      setSaving(true);
+      const payload = {
+        name: formData.organizationName,
+        type: formData.organizationType,
+        registration_number: formData.registrationNumber,
+        gst_number: formData.gst,
+        address: formData.address,
+        city: formData.city,
+        state: formData.state,
+        country: formData.country,
+        pincode: formData.pincode,
+        contact_number: formData.contactNumber,
+        email: formData.email,
+        timezone: formData.timeZone || 'IST (UTC+5:30)',
+        organization_url: formData.organizationUrl || '',
+        institution_url_same: formData.institutionUrlSame ? 1 : 0,
+        software_website_url: formData.softwareWebsiteUrl || '',
+        login_template: formData.loginTemplate || 'Standard',
+        logo: formData.logo || '',
+        default_language: formData.defaultLanguage || 'English',
+        admin_name: formData.adminName,
+        admin_email: formData.adminEmail,
+        admin_mobile: formData.adminMobile,
+        status: formData.status === 'Active' ? 1 : 0,
+        plan_type: formData.subscriptionPlan,
+      };
+
+      if (isEditMode && formData.id) {
+        await updateOrganization(formData.id, payload);
+      } else {
+        await createOrganization(payload);
+      }
+
+      if (onSave) {
+        onSave();
+      }
+
+      Alert.alert(
+        'Success',
+        isEditMode ? 'Organization updated.' : 'Organization added.',
+        [{text: 'OK', onPress: () => navigation.goBack()}],
+      );
+    } catch (error) {
+      const message = getErrorMessage(error);
+      console.error('Error saving organization:', error);
+      Alert.alert('Error', message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -166,7 +207,7 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
           </Text>
           <FlatList
             data={picker.options}
-            style={[styles.modalList, {maxHeight: modalMaxHeight}]}
+            style={[styles.modalList, {maxHeight: 300}]}
             contentContainerStyle={styles.modalListContent}
             showsVerticalScrollIndicator={true}
             keyboardShouldPersistTaps="handled"
@@ -199,37 +240,6 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
     );
   };
 
-  const renderModulesModal = () => (
-    <Modal
-      transparent
-      visible={modulesModal}
-      animationType="slide"
-      onRequestClose={() => setModulesModal(false)}>
-      <View style={StyleSheet.flatten([styles.modalBody, {backgroundColor: colors.card}])}>
-        <Text style={StyleSheet.flatten([styles.modalTitle, {color: colors.primary}])}>
-          Select Modules
-        </Text>
-        <FlatList
-          data={MODULES}
-          style={[styles.modalList, {maxHeight: modalMaxHeight}]}
-          contentContainerStyle={styles.modalListContent}
-          showsVerticalScrollIndicator={true}
-          keyboardShouldPersistTaps="handled"
-          keyExtractor={(item, index) => `${item}-${index}`}
-          renderItem={({item}) => (
-            <View style={styles.moduleItem}>
-              <Text style={styles.moduleLabel}>{item}</Text>
-              <Switch
-                checked={formData.enabledModules.includes(item)}
-                onPress={() => toggleModule(item)}
-              />
-            </View>
-          )}
-        />
-      </View>
-    </Modal>
-  );
-
   return (
     <Block safe style={[styles.container, {backgroundColor: colors.background}]}> 
       <View
@@ -243,7 +253,7 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {renderSectionTitle('Master Details')}
+        {renderSectionTitle('Organization Master')}
         <FormInput
           label="Organization Name *"
           placeholder="Enter organization name"
@@ -251,7 +261,7 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
           onChangeText={value => updateField('organizationName', value)}
         />
         <FormInput
-          label="Organization Type"
+          label="Organization Type *"
           placeholder="Select type"
           value={formData.organizationType}
           onChangeText={() => {}}
@@ -267,46 +277,13 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
           onChangeText={value => updateField('registrationNumber', value)}
         />
         <FormInput
-          label="GST"
-          placeholder="Enter GST"
+          label="GST / Tax ID"
+          placeholder="Enter GST number"
           value={formData.gst}
           onChangeText={value => updateField('gst', value)}
         />
         <FormInput
-          label="Address"
-          placeholder="Enter address"
-          value={formData.address}
-          onChangeText={value => updateField('address', value)}
-          multiline
-          numberOfLines={2}
-        />
-        <FormInput
-          label="City"
-          placeholder="Enter city"
-          value={formData.city}
-          onChangeText={value => updateField('city', value)}
-        />
-        <FormInput
-          label="State"
-          placeholder="Enter state"
-          value={formData.state}
-          onChangeText={value => updateField('state', value)}
-        />
-        <FormInput
-          label="Country"
-          placeholder="Enter country"
-          value={formData.country}
-          onChangeText={value => updateField('country', value)}
-        />
-        <FormInput
-          label="Pincode"
-          placeholder="Enter pincode"
-          value={formData.pincode}
-          onChangeText={value => updateField('pincode', value)}
-          keyboardType="numeric"
-        />
-        <FormInput
-          label="Contact Number"
+          label="Contact Number *"
           placeholder="Enter contact number"
           value={formData.contactNumber}
           onChangeText={value => updateField('contactNumber', value)}
@@ -319,103 +296,65 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
           onChangeText={value => updateField('email', value)}
           keyboardType="email-address"
         />
+
+        {renderSectionTitle('Address Details')}
         <FormInput
-          label="Time Zone"
-          placeholder="Select time zone"
-          value={formData.timeZone}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() => setPicker({field: 'timeZone', options: TIMEZONES})}
+          label="Address *"
+          placeholder="Enter address"
+          value={formData.address}
+          onChangeText={value => updateField('address', value)}
+          multiline
+          numberOfLines={3}
+        />
+        <FormInput
+          label="City *"
+          placeholder="Enter city"
+          value={formData.city}
+          onChangeText={value => updateField('city', value)}
+        />
+        <FormInput
+          label="State *"
+          placeholder="Enter state"
+          value={formData.state}
+          onChangeText={value => updateField('state', value)}
+        />
+        <FormInput
+          label="Country *"
+          placeholder="Enter country"
+          value={formData.country}
+          onChangeText={value => updateField('country', value)}
+        />
+        <FormInput
+          label="Pincode *"
+          placeholder="Enter pincode"
+          value={formData.pincode}
+          onChangeText={value => updateField('pincode', value)}
+          keyboardType="numeric"
         />
 
-        {renderSectionTitle('Access & Branding')}
+        {renderSectionTitle('Admin & Subscription')}
         <FormInput
-          label="Organization URL"
-          placeholder="https://example.com"
-          value={formData.organizationUrl}
-          onChangeText={value => updateField('organizationUrl', value)}
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Institution URL Same?</Text>
-          <Switch
-            checked={formData.institutionUrlSame}
-            onPress={value => updateField('institutionUrlSame', value)}
-          />
-        </View>
-        <FormInput
-          label="Software Website URL"
-          placeholder="https://software.example.com"
-          value={formData.softwareWebsiteUrl}
-          onChangeText={value => updateField('softwareWebsiteUrl', value)}
-        />
-        <FormInput
-          label="Login Template"
-          placeholder="Enter login template"
-          value={formData.loginTemplate}
-          onChangeText={value => updateField('loginTemplate', value)}
-        />
-        <FormInput
-          label="Default Language"
-          placeholder="Select language"
-          value={formData.defaultLanguage}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() =>
-            setPicker({field: 'defaultLanguage', options: LANGUAGES})
-          }
-        />
-
-        {renderSectionTitle('Admin & Control')}
-        <FormInput
-          label="Admin Name"
+          label="Admin Name *"
           placeholder="Enter admin name"
           value={formData.adminName}
           onChangeText={value => updateField('adminName', value)}
         />
         <FormInput
-          label="Admin Email"
+          label="Admin Email *"
           placeholder="Enter admin email"
           value={formData.adminEmail}
           onChangeText={value => updateField('adminEmail', value)}
           keyboardType="email-address"
         />
         <FormInput
-          label="Admin Mobile"
+          label="Admin Mobile *"
           placeholder="Enter admin mobile"
           value={formData.adminMobile}
           onChangeText={value => updateField('adminMobile', value)}
           keyboardType="phone-pad"
         />
         <FormInput
-          label="Status"
-          placeholder="Select status"
-          value={formData.status}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() => setPicker({field: 'status', options: STATUSES})}
-        />
-
-        {renderSectionTitle('Legal & Commercial')}
-        <FormInput
-          label="PO Number"
-          placeholder="Enter PO number"
-          value={formData.poNumber}
-          onChangeText={value => updateField('poNumber', value)}
-        />
-        <FormInput
-          label="PO Start Date"
-          placeholder="YYYY-MM-DD"
-          value={formData.poStartDate}
-          onChangeText={value => updateField('poStartDate', value)}
-        />
-        <FormInput
-          label="PO End Date"
-          placeholder="YYYY-MM-DD"
-          value={formData.poEndDate}
-          onChangeText={value => updateField('poEndDate', value)}
-        />
-        <FormInput
-          label="Subscription Plan"
+          label="Subscription Plan *"
           placeholder="Select plan"
           value={formData.subscriptionPlan}
           onChangeText={() => {}}
@@ -424,110 +363,22 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
             setPicker({field: 'subscriptionPlan', options: PLANS})
           }
         />
-        <TouchableOpacity
-          style={styles.modulesButton}
-          onPress={() => setModulesModal(true)}>
-          <Text style={styles.modulesText}>
-            Enabled Modules ({formData.enabledModules.length} selected)
-          </Text>
-        </TouchableOpacity>
-
-        {renderSectionTitle('Billing & Payment')}
         <FormInput
-          label="Invoice Type"
-          placeholder="Select type"
-          value={formData.invoiceType}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() => setPicker({field: 'invoiceType', options: INVOICE_TYPES})}
-        />
-        <FormInput
-          label="Invoice Frequency"
-          placeholder="Select frequency"
-          value={formData.invoiceFrequency}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() =>
-            setPicker({field: 'invoiceFrequency', options: INVOICE_TYPES})
-          }
-        />
-        <FormInput
-          label="Payment Mode"
-          placeholder="Select payment mode"
-          value={formData.paymentMode}
-          onChangeText={() => {}}
-          isPickerInput
-          onPress={() =>
-            setPicker({field: 'paymentMode', options: PAYMENT_MODES})
-          }
-        />
-        <FormInput
-          label="Invoice Amount"
-          placeholder="Enter amount"
-          value={formData.invoiceAmount}
-          onChangeText={value => updateField('invoiceAmount', value)}
-          keyboardType="decimal-pad"
-        />
-        <FormInput
-          label="Payment Status"
+          label="Organization Status *"
           placeholder="Select status"
-          value={formData.paymentStatus}
+          value={formData.status}
           onChangeText={() => {}}
           isPickerInput
-          onPress={() =>
-            setPicker({field: 'paymentStatus', options: PAYMENT_STATUSES})
-          }
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Payment Received</Text>
-          <Switch
-            checked={formData.paymentReceived}
-            onPress={value => updateField('paymentReceived', value)}
-          />
-        </View>
-        <FormInput
-          label="Payment Date"
-          placeholder="YYYY-MM-DD"
-          value={formData.paymentDate}
-          onChangeText={value => updateField('paymentDate', value)}
-        />
-        <FormInput
-          label="Transaction Reference"
-          placeholder="Enter transaction id"
-          value={formData.transactionReference}
-          onChangeText={value => updateField('transactionReference', value)}
-        />
-
-        {renderSectionTitle('Support & Communication')}
-        <FormInput
-          label="POC Name"
-          placeholder="Enter POC name"
-          value={formData.pocName}
-          onChangeText={value => updateField('pocName', value)}
-        />
-        <FormInput
-          label="POC Email"
-          placeholder="Enter POC email"
-          value={formData.pocEmail}
-          onChangeText={value => updateField('pocEmail', value)}
-          keyboardType="email-address"
-        />
-        <FormInput
-          label="POC Contact"
-          placeholder="Enter POC contact"
-          value={formData.pocContact}
-          onChangeText={value => updateField('pocContact', value)}
-          keyboardType="phone-pad"
-        />
-        <FormInput
-          label="Support SLA"
-          placeholder="e.g. 99.9%"
-          value={formData.supportSLA}
-          onChangeText={value => updateField('supportSLA', value)}
+          onPress={() => setPicker({field: 'status', options: STATUSES})}
         />
 
         <View style={styles.buttonRow}>
           <PrimaryButton title="Save" onPress={handleSave} style={{flex: 1}} />
+          {saving ? (
+            <View style={styles.savingIndicator}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null}
           <PrimaryButton
             title="Cancel"
             onPress={handleCancel}
@@ -538,7 +389,6 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       </ScrollView>
 
       {renderPickerModal()}
-      {renderModulesModal()}
     </Block>
   );
 };
@@ -576,40 +426,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#000',
   },
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  switchLabel: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
-  modulesButton: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    marginBottom: 16,
-  },
-  modulesText: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
-  },
   buttonRow: {
     flexDirection: 'row',
     marginTop: 24,
+  },
+  savingIndicator: {
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   modalBody: {
     padding: 16,
@@ -631,30 +454,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  modalOptionSelected: {
-    backgroundColor: '#e3f2fd',
-  },
   modalOptionText: {
     fontSize: 14,
     color: '#333',
-  },
-  modalOptionTextSelected: {
-    color: '#007AFF',
-    fontWeight: '600',
-  },
-  moduleItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  moduleLabel: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '500',
   },
 });
 

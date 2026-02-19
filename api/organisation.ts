@@ -56,5 +56,8 @@ export async function deleteOrganization(id: string) {
         throw error;
     }
 }
+export async function toggleOrganizationStatus(id: string) {
+  return apiclient.post(`${endpoint.organizations}/${id}/toggle-status`);
+}
 
 

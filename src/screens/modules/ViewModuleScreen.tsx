@@ -32,15 +32,8 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
   const [loading, setLoading] = useState(true);
 
   const normalizeModule = (raw: any): SystemModule => {
-    const typeRaw = String(raw.type ?? raw.module_type ?? '').toLowerCase();
-    const type: SystemModule['type'] =
-      typeRaw === 'web' || typeRaw === 'app' || typeRaw === 'both'
-        ? (typeRaw as SystemModule['type'])
-        : 'both';
-
-    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? 'Institution';
-    const accessFor: SystemModule['accessFor'] =
-      String(accessRaw).toLowerCase().includes('service') ? 'Service' : 'Institution';
+    const typeRaw = raw.type ?? raw.module_type ?? '';
+    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? '';
 
     const parentId = raw.parent_module ?? raw.parent_module_id ?? raw.parentModuleId;
     const isActiveValue = raw.is_active ?? raw.isActive ?? raw.status;
@@ -62,8 +55,8 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
       icon: raw.icon ?? '',
       fileUrl: raw.file_url ?? raw.fileUrl ?? '',
       pageName: raw.page_name ?? raw.pageName ?? '',
-      type,
-      accessFor,
+      type: String(typeRaw),
+      accessFor: String(accessRaw),
       isActive,
     };
   };
@@ -101,6 +94,16 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
     loadModule();
   }, [moduleId]);
 
+  const parentModule = useMemo(() => {
+    if (!module || module.parentModuleId === null) return null;
+    return modules.find((m) => m.id === module.parentModuleId);
+  }, [module, modules]);
+
+  const childModules = useMemo(() => {
+    if (!module) return [];
+    return modules.filter((m) => m.parentModuleId === module.id);
+  }, [module, modules]);
+
   if (loading) {
     return (
       <Block safe style={[styles.container, {backgroundColor: colors.background}]}> 
@@ -127,15 +130,6 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
     );
   }
 
-  const parentModule = useMemo(() => {
-    if (module.parentModuleId === null) return null;
-    return modules.find((m) => m.id === module.parentModuleId);
-  }, [module.parentModuleId, modules]);
-
-  const childModules = useMemo(() => {
-    return modules.filter((m) => m.parentModuleId === module.id);
-  }, [module.id, modules]);
-
   const handleEdit = () => {
     navigation.navigate('AddEditModule', {
       mode: 'edit',
@@ -156,16 +150,10 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
       <View style={styles.childHeader}>
         <Text style={styles.childName}>{child.displayName}</Text>
         <View style={styles.childBadges}>
-          <View
-            style={[
-              styles.badge,
-              child.type === 'web'
-                ? styles.webBadge
-                : child.type === 'app'
-                ? styles.appBadge
-                : styles.bothBadge,
-            ]}>
-            <Text style={styles.badgeText}>{child.type.toUpperCase()}</Text>
+          <View style={[styles.badge, styles.otherBadge]}>
+            <Text style={styles.badgeText}>
+              {child.type ? child.type.toUpperCase() : 'N/A'}
+            </Text>
           </View>
         </View>
       </View>
@@ -210,30 +198,18 @@ export const ViewModuleScreen: React.FC<ViewModuleScreenProps> = ({
           </Text>
           <View style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>Type:</Text>
-            <View
-              style={[
-                styles.badge,
-                module.type === 'web'
-                  ? styles.webBadge
-                  : module.type === 'app'
-                  ? styles.appBadge
-                  : styles.bothBadge,
-              ]}>
+            <View style={[styles.badge, styles.otherBadge]}>
               <Text style={styles.badgeText}>
-                {module.type.toUpperCase()}
+                {module.type ? module.type.toUpperCase() : 'N/A'}
               </Text>
             </View>
           </View>
           <View style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>Access For:</Text>
-            <View
-              style={[
-                styles.badge,
-                module.accessFor === 'Institution'
-                  ? styles.institutionBadge
-                  : styles.serviceBadge,
-              ]}>
-              <Text style={styles.badgeText}>{module.accessFor}</Text>
+            <View style={[styles.badge, styles.otherBadge]}>
+              <Text style={styles.badgeText}>
+                {module.accessFor || 'N/A'}
+              </Text>
             </View>
           </View>
         </View>
@@ -354,20 +330,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
   },
-  webBadge: {
-    backgroundColor: '#FF9800',
-  },
-  appBadge: {
-    backgroundColor: '#9C27B0',
-  },
-  bothBadge: {
-    backgroundColor: '#4CAF50',
-  },
-  institutionBadge: {
-    backgroundColor: '#2196F3',
-  },
-  serviceBadge: {
-    backgroundColor: '#F44336',
+  otherBadge: {
+    backgroundColor: '#607D8B',
   },
   hierarchyLabel: {
     fontSize: 16,

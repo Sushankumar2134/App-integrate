@@ -1,95 +1,74 @@
 import React, {useMemo, useState} from 'react';
 import {Alert, FlatList, StyleSheet, View} from 'react-native';
-import {Institution} from '../../types/institution';
+import {Organization} from '../../types/organization';
 import {Block, Text} from '../../components';
 import PrimaryButton from '../../components/PrimaryButton';
 import {useTheme} from '../../hooks';
-import {restoreInstitution, deleteInstitution} from '../../../api/institution';
 
-interface DeletedInstitutionScreenProps {
+interface DeletedOrganizationScreenProps {
   navigation: any;
   route: any;
 }
 
-const DeletedInstitutionScreen: React.FC<DeletedInstitutionScreenProps> = ({
+const DeletedOrganizationScreen: React.FC<DeletedOrganizationScreenProps> = ({
   navigation,
   route,
 }) => {
   const {colors} = useTheme();
-  const [institutions, setInstitutions] = useState<Institution[]>(
-    route.params?.deletedInstitutions || [],
+  const [organizations, setOrganizations] = useState<Organization[]>(
+    route.params?.deletedOrganizations || [],
   );
 
-  const deletedInstitutions = useMemo(() => {
-    return institutions.filter(inst => inst.isDeleted);
-  }, [institutions]);
+  const deletedOrganizations = useMemo(() => {
+    return organizations.filter(org => org.isDeleted);
+  }, [organizations]);
 
-  const handleRestore = (institution: Institution) => {
+  const handleRestore = (organization: Organization) => {
     Alert.alert(
-      'Restore Institution',
-      `Restore "${institution.institutionName}"?`,
+      'Restore Organization',
+      `Restore "${organization.organizationName}"?`,
       [
         {text: 'Cancel', onPress: () => {}, style: 'cancel'},
         {
           text: 'Restore',
-          onPress: async () => {
-            try {
-              // Call API to restore institution
-              await restoreInstitution(institution.id);
-              
-              // Update local state
-              const restored: Institution[] = institutions.map(inst =>
-                inst.id === institution.id ? {...inst, isDeleted: false, status: 'Active' as const} : inst,
-              );
-              setInstitutions(restored);
-              
-              // Notify parent with restored array
-              if (route.params?.onRestore) {
-                route.params.onRestore(restored);
-              }
-              
-              Alert.alert('Success', 'Institution has been restored.', [
-                {text: 'OK'},
-              ]);
-            } catch (error) {
-              console.error('Error restoring institution:', error);
-              Alert.alert('Error', 'Failed to restore institution. Please try again.');
+          onPress: () => {
+            const restored = organizations.map(org =>
+              org.id === organization.id ? {...org, isDeleted: false} : org,
+            );
+            setOrganizations(restored);
+            
+            if (route.params?.onRestore) {
+              route.params.onRestore(restored);
             }
+            
+            Alert.alert('Success', 'Organization has been restored.', [
+              {text: 'OK'},
+            ]);
           },
         },
       ],
     );
   };
 
-  const handlePermanentDelete = (institution: Institution) => {
+  const handlePermanentDelete = (organization: Organization) => {
     Alert.alert(
       'Permanent Delete',
-      `This will permanently delete "${institution.institutionName}". This action cannot be undone.`,
+      `This will permanently delete "${organization.organizationName}". This action cannot be undone.`,
       [
         {text: 'Cancel', onPress: () => {}, style: 'cancel'},
         {
           text: 'Delete',
-          onPress: async () => {
-            try {
-              // Call API to permanently delete the institution
-              await deleteInstitution(institution.id);
-              
-              // Update local state
-              const filtered = institutions.filter(inst => inst.id !== institution.id);
-              setInstitutions(filtered);
-              
-              // Notify parent with filtered array
-              if (route.params?.onDelete) {
-                route.params.onDelete(filtered);
-              }
-              
-              Alert.alert('Success', 'Institution has been permanently deleted.', [
-                {text: 'OK'},
-              ]);
-            } catch (error) {
-              console.error('Error permanently deleting institution:', error);
-              Alert.alert('Error', 'Failed to delete institution. Please try again.');
+          onPress: () => {
+            const filtered = organizations.filter(org => org.id !== organization.id);
+            setOrganizations(filtered);
+            
+            if (route.params?.onDelete) {
+              route.params.onDelete(filtered);
             }
+            
+            Alert.alert('Success', 'Organization has been permanently deleted.', [
+              {text: 'OK'},
+            ]);
           },
           style: 'destructive',
         },
@@ -97,15 +76,15 @@ const DeletedInstitutionScreen: React.FC<DeletedInstitutionScreenProps> = ({
     );
   };
 
-  const renderDeletedInstitution = ({item, index}: {item: Institution; index: number}) => (
+  const renderDeletedOrganization = ({item, index}: {item: Organization; index: number}) => (
     <View style={styles.card}>
       <View style={styles.content}>
         <View style={styles.infoSection}>
           <Text style={styles.slNo}>#{index + 1}</Text>
           <View style={styles.details}>
-            <Text style={styles.institutionName}>{item.institutionName}</Text>
-            <Text style={styles.code}>{item.institutionCode}</Text>
-            <Text style={styles.organization}>{item.organizationId}</Text>
+            <Text style={styles.organizationName}>{item.organizationName}</Text>
+            <Text style={styles.type}>{item.organizationType}</Text>
+            <Text style={styles.email}>{item.email}</Text>
           </View>
         </View>
 
@@ -137,27 +116,27 @@ const DeletedInstitutionScreen: React.FC<DeletedInstitutionScreenProps> = ({
           {backgroundColor: colors.card, borderBottomColor: colors.light},
         ]}>
         <Text style={StyleSheet.flatten([styles.title, {color: colors.text}])}>
-          Deleted Institutions
+          Deleted Organizations
         </Text>
         <Text style={StyleSheet.flatten([styles.subtitle, {color: colors.gray}])}>
-          {deletedInstitutions.length} deleted
+          {deletedOrganizations.length} deleted
         </Text>
       </View>
 
-      {deletedInstitutions.length > 0 ? (
+      {deletedOrganizations.length > 0 ? (
         <FlatList
-          data={deletedInstitutions}
-          renderItem={renderDeletedInstitution}
+          data={deletedOrganizations}
+          renderItem={renderDeletedOrganization}
           keyExtractor={item => item.id}
           contentContainerStyle={styles.listContent}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No deleted institutions</Text>
+          <Text style={styles.emptyText}>No deleted organizations</Text>
           <PrimaryButton
-            title="Back to Institutions"
+            title="Back to Organizations"
             onPress={() => navigation.goBack()}
-            style={{marginTop: 20, minWidth: 200}}
+            style={{marginTop: 12, minWidth: 20}}
           />
         </View>
       )}
@@ -217,25 +196,24 @@ const styles = StyleSheet.create({
   details: {
     flex: 1,
   },
-  institutionName: {
+  organizationName: {
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
     marginBottom: 4,
   },
-  code: {
+  type: {
     fontSize: 12,
     color: '#666',
     marginBottom: 2,
   },
-  organization: {
+  email: {
     fontSize: 12,
     color: '#999',
   },
   actionButtons: {
     flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
+    gap: 10,
   },
   emptyContainer: {
     flex: 1,
@@ -245,8 +223,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: '#999',
-    marginBottom: 10,
   },
 });
 
-export default DeletedInstitutionScreen;
+export default DeletedOrganizationScreen;

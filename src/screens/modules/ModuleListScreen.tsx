@@ -8,8 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import {Ionicons} from '@expo/vector-icons';
 import {SystemModule} from '../../types/modules';
-import {fetchmodules} from '../../../api/module';
+import {fetchmodules, deleteModule, updateModule} from '../../../api/module';
 import {Block, Button, Input, Text} from '../../components';
 import {useTheme} from '../../hooks';
 
@@ -27,15 +28,8 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
   const [loading, setLoading] = useState(true);
 
   const normalizeModule = (raw: any): SystemModule => {
-    const typeRaw = String(raw.type ?? raw.module_type ?? '').toLowerCase();
-    const type: SystemModule['type'] =
-      typeRaw === 'web' || typeRaw === 'app' || typeRaw === 'both'
-        ? (typeRaw as SystemModule['type'])
-        : 'both';
-
-    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? 'Institution';
-    const accessFor: SystemModule['accessFor'] =
-      String(accessRaw).toLowerCase().includes('service') ? 'Service' : 'Institution';
+    const typeRaw = raw.type ?? raw.module_type ?? '';
+    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? '';
 
     const parentId = raw.parent_module ?? raw.parent_module_id ?? raw.parentModuleId;
     const isActiveValue = raw.is_active ?? raw.isActive ?? raw.status;
@@ -57,9 +51,10 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
       icon: raw.icon ?? '',
       fileUrl: raw.file_url ?? raw.fileUrl ?? '',
       pageName: raw.page_name ?? raw.pageName ?? '',
-      type,
-      accessFor,
+      type: String(typeRaw),
+      accessFor: String(accessRaw),
       isActive,
+      isDeleted: false,
     };
   };
 
@@ -89,15 +84,15 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
 
   const filteredModules = useMemo(() => {
     return modules
+      .filter((module) => !module.isDeleted) // Exclude deleted modules
       .filter((module) => module.moduleLabel !== 'dashboard') // Hide dashboard
       .filter((module) => {
         const matchesSearch =
           module.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
           module.moduleLabel.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesRole = module.accessFor === roleFilter;
-        return matchesSearch && matchesRole;
+        return matchesSearch;
       });
-  }, [modules, searchQuery, roleFilter]);
+  }, [modules, searchQuery]);
 
   const getParentModuleFileUrl = (parentId: string | null): string => {
     if (!parentId) return '-';
@@ -106,13 +101,29 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
   };
 
   const handleAdd = () => {
-    navigation.navigate('AddEditModule', {mode: 'add', roleFilter});
+    navigation.navigate('AddEditModule', {
+      mode: 'add',
+      roleFilter,
+      onSave: () => {
+        // Reload modules after creating new one
+        loadModules();
+      },
+    });
   };
 
   const handleDeletedModules = () => {
-    // Navigate to deleted modules screen
-    // navigation.navigate('DeletedModules');
-    console.log('Navigate to Deleted Modules');
+    const deletedMods = modules.filter(mod => mod.isDeleted);
+    navigation.navigate('DeletedModules', {
+      deletedModules: deletedMods,
+      onRestore: () => {
+        // Reload all modules from API after restore
+        loadModules();
+      },
+      onDelete: () => {
+        // Reload all modules from API after permanent delete
+        loadModules();
+      },
+    });
   };
 
   const handleEdit = (module: SystemModule) => {
@@ -120,10 +131,9 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
       mode: 'edit',
       module,
       roleFilter,
-      onSave: (updatedModule: SystemModule) => {
-        setModules((prev) =>
-          prev.map((m) => (m.id === updatedModule.id ? updatedModule : m)),
-        );
+      onSave: () => {
+        // Reload modules after updating to get latest data from API
+        loadModules();
       },
     });
   };
@@ -134,16 +144,66 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
     });
   };
 
-  const handleToggleStatus = (id: string) => {
-    setModules((prev) =>
-      prev.map((module) =>
-        module.id === id ? {...module, isActive: !module.isActive} : module,
-      ),
+  const handleToggleStatus = async (id: string) => {
+    try {
+      const module = modules.find((m) => m.id === id);
+      if (!module) return;
+
+      const newStatus = !module.isActive;
+      // Call API to update status - backend expects status as 1 or 0
+      await updateModule(id, {status: newStatus ? 1 : 0});
+
+      // Update local state after successful API call
+      setModules((prev) =>
+        prev.map((mod) =>
+          mod.id === id ? {...mod, isActive: newStatus} : mod,
+        ),
+      );
+      Alert.alert(
+        'Success',
+        `Module ${newStatus ? 'activated' : 'deactivated'} successfully`,
+      );
+    } catch (error) {
+      console.error('Error toggling module status:', error);
+      Alert.alert('Error', 'Failed to update module status');
+    }
+  };
+
+  const handleDeleteModule = (id: string, displayName: string) => {
+    Alert.alert(
+      'Confirm Delete',
+      `Are you sure you want to delete "${displayName}"?`,
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteModule(id);
+              
+              setModules(prev =>
+                prev.map(mod =>
+                  mod.id === id ? {...mod, isDeleted: true} : mod,
+                ),
+              );
+              
+              Alert.alert('Success', 'Module deleted successfully');
+            } catch (error) {
+              console.error('Error deleting module:', error);
+              Alert.alert('Error', 'Failed to delete module');
+            }
+          },
+        },
+      ],
     );
   };
 
-  const renderTableRow = (module: SystemModule) => (
+  const renderTableRow = (module: SystemModule, index: number) => (
     <View key={module.id} style={styles.tableRow}>
+      <View style={[styles.tableCell, styles.slnoCell]}>
+        <Text style={styles.cellText}>{index + 1}</Text>
+      </View>
       <View style={[styles.tableCell, styles.labelCell]}>
         <Text style={styles.cellText}>{module.moduleLabel}</Text>
       </View>
@@ -162,16 +222,10 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
         <Text style={styles.cellText}>{module.pageName}</Text>
       </View>
       <View style={[styles.tableCell, styles.typeCell]}>
-        <View
-          style={[
-            styles.typeBadge,
-            module.type === 'web'
-              ? styles.webBadge
-              : module.type === 'app'
-              ? styles.appBadge
-              : styles.bothBadge,
-          ]}>
-          <Text style={styles.badgeText}>{module.type.toUpperCase()}</Text>
+        <View style={[styles.typeBadge, styles.otherBadge]}>
+          <Text style={styles.badgeText}>
+            {module.type ? module.type.toUpperCase() : 'N/A'}
+          </Text>
         </View>
       </View>
       <View style={[styles.tableCell, styles.statusCell]}>
@@ -187,14 +241,28 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
       </View>
       <View style={[styles.tableCell, styles.actionCell]}>
         <TouchableOpacity
-          style={styles.actionBtn}
+          style={styles.iconBtn}
           onPress={() => handleView(module)}>
-          <Text style={styles.actionText}>View</Text>
+          <Ionicons name="eye" size={20} color="#2196F3" />
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.actionBtn}
+          style={styles.iconBtn}
           onPress={() => handleEdit(module)}>
-          <Text style={styles.actionText}>Edit</Text>
+          <Ionicons name="pencil" size={20} color="#FFC107" />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => handleToggleStatus(module.id)}>
+          <Ionicons
+            name={module.isActive ? 'checkmark-circle' : 'close-circle'}
+            size={20}
+            color={module.isActive ? '#4CAF50' : '#f44336'}
+          />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => handleDeleteModule(module.id, module.displayName)}>
+          <Ionicons name="trash" size={20} color="#f44336" />
         </TouchableOpacity>
       </View>
     </View>
@@ -255,6 +323,50 @@ export const ModuleListScreen: React.FC<ModuleListScreenProps> = ({
           </Button>
         </View>
       </View>
+
+      {filteredModules.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+          <View>
+            {/* Table Header */}
+            <View style={styles.tableHeader}>
+              <View style={[styles.tableHeaderCell, styles.slnoCell]}>
+                <Text style={styles.headerText}>SL.NO</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.labelCell]}>
+                <Text style={styles.headerText}>Label</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.nameCell]}>
+                <Text style={styles.headerText}>Display Name</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.pathCell]}>
+                <Text style={styles.headerText}>Parent</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.accessCell]}>
+                <Text style={styles.headerText}>Access For</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.pageNameCell]}>
+                <Text style={styles.headerText}>Page Name</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.typeCell]}>
+                <Text style={styles.headerText}>Type</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.statusCell]}>
+                <Text style={styles.headerText}>Status</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.actionCell]}>
+                <Text style={styles.headerText}>Actions</Text>
+              </View>
+            </View>
+
+            {/* Table Rows */}
+            {filteredModules.map((item, index) => renderTableRow(item, index))}
+          </View>
+        </ScrollView>
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>No modules found</Text>
+        </View>
+      )}
     </Block>
   );
 };
@@ -331,6 +443,9 @@ const styles = StyleSheet.create({
   buttonHalf: {
     flex: 1,
   },
+  listContent: {
+    padding: 12,
+  },
   tableContainer: {
     flex: 1,
     backgroundColor: '#fff',
@@ -384,11 +499,14 @@ const styles = StyleSheet.create({
   typeCell: {
     width: 90,
   },
+  slnoCell: {
+    width: 60,
+  },
   statusCell: {
     width: 100,
   },
   actionCell: {
-    width: 130,
+    width: 150,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -423,10 +541,20 @@ const styles = StyleSheet.create({
   bothBadge: {
     backgroundColor: '#4CAF50',
   },
+  otherBadge: {
+    backgroundColor: '#607D8B',
+  },
   actionBtn: {
     paddingHorizontal: 8,
     paddingVertical: 4,
     marginHorizontal: 4,
+  },
+  iconBtn: {
+    padding: 6,
+    marginHorizontal: 4,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionText: {
     fontSize: 12,

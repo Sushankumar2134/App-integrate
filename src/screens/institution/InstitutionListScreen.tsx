@@ -6,13 +6,19 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
-import axios from 'axios';
+import { Ionicons } from '@expo/vector-icons';
 
 import { Institution } from '../../types/institution';
 import { Block, Button, Input, Text } from '../../components';
 import { useTheme } from '../../hooks';
-import { clampRGBA } from 'react-native-reanimated/lib/typescript/Colors';
+import {
+  fetchInstitutions,
+  deleteInstitution,
+  updateInstitution,
+  toggleInstitutionStatus,
+} from '../../../api/institution';
 
 interface InstitutionListScreenProps {
   navigation: any;
@@ -28,38 +34,70 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // ================= API URL =================
-  const API_URL =
-    'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/institutions';
+  // ================= NORMALIZE =================
+  const normalizeInstitution = (inst: any): Institution => ({
+    id: inst.id,
+    institutionName: inst.name || '',
+    institutionCode: inst.code || '',
+    organizationId: inst.organization_id || '',
+    gst: inst.gst_number || '',
+    address: inst.address || '',
+    city: inst.city || '',
+    state: inst.state || '',
+    country: inst.country || '',
+    pincode: inst.pincode || '',
+    contactNumber: inst.contact_number || '',
+    email: inst.email || '',
+    timeZone: inst.timezone || '',
+    institutionUrl: inst.institution_url || '',
+    loginTemplate: inst.login_template || '',
+    logo: inst.logo || '',
+    defaultLanguage: inst.default_language || '',
+    adminName: inst.admin_name || '',
+    adminEmail: inst.admin_email || '',
+    adminMobile: inst.admin_mobile || '',
+    role: inst.role || '',
+    status: inst.status === 1 ? 'Active' : 'Inactive',
+    mouCopy: inst.mou_copy || '',
+    poNumber: inst.po_number || '',
+    poStartDate: inst.po_start_date || '',
+    poEndDate: inst.po_end_date || '',
+    subscriptionPlan: inst.subscription_plan || '',
+    modules: inst.modules || [],
+    invoiceType: inst.invoice_type || '',
+    invoiceFrequency: inst.invoice_frequency || '',
+    paymentMode: inst.payment_mode || '',
+    invoiceAmount: inst.invoice_amount || '',
+    paymentStatus: inst.payment_status || '',
+    paymentReceived: inst.payment_received === true || inst.payment_received === 1 ? 'Yes' : 'No',
+    paymentDate: inst.payment_date || '',
+    transactionReference: inst.transaction_reference || '',
+    pocName: inst.poc_name || '',
+    pocEmail: inst.poc_email || '',
+    pocContact: inst.poc_contact || '',
+    supportSLA: inst.support_sla || '',
+    isDeleted: false,
+  });
 
   // ================= FETCH DATA =================
-  const fetchInstitutions = async () => {
+  const handleFetchInstitutions = async () => {
     try {
       setLoading(true);
 
-      const response = await axios.get(API_URL, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      const data = Array.isArray(response.data)
+      const response = await fetchInstitutions();
+      const list = Array.isArray(response?.data)
         ? response.data
-        : response.data.data;
-        
-      const formattedData = data.map((item: any) => ({
-      id: item.id,
-      institutionName: item.name, // ✅ Fix name field
-      organizationId: item.organization_id,
-      institutionUrl: item.institution_url,
-      status: item.status === 1 ? 'Active' : 'Inactive', // ✅ Fix status
-      isDeleted: item.deleted_at !== null,
-    }));
+        : response?.data?.data || [];
 
-    setInstitutions(formattedData);
+      if (!Array.isArray(list)) {
+        console.log('Invalid API response:', response?.data);
+        return;
+      }
+
+      setInstitutions(list.map(normalizeInstitution));
     } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'Unable to load institutions from server');
+      console.error('Error fetching institutions:', error);
+      Alert.alert('Error', 'Failed to load institutions');
     } finally {
       setLoading(false);
     }
@@ -67,7 +105,7 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
 
   // ================= ON LOAD =================
   useEffect(() => {
-    fetchInstitutions();
+    handleFetchInstitutions();
   }, []);
 
   // ================= FILTERS =================
@@ -87,43 +125,90 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
 
   // ================= HANDLERS =================
   const handleAddInstitution = () => {
-    navigation.navigate('AddEditInstitution', { institution: null });
+    navigation.navigate('AddEditInstitution', { 
+      institutionId: null,
+      isEditMode: false,
+      onSave: () => {
+        console.log('onSave callback triggered from add');
+        handleFetchInstitutions();
+      },
+    });
   };
 
   const handleDeletedInstitutions = () => {
-    navigation.navigate('DeletedInstitution');
+    const deletedInsts = institutions.filter(inst => inst.isDeleted);
+    navigation.navigate('DeletedInstitution', {
+      deletedInstitutions: deletedInsts,
+      onRestore: (restoredInstitutions: Institution[]) => {
+        // Update with restored array
+        setInstitutions(restoredInstitutions);
+      },
+      onDelete: (filteredInstitutions: Institution[]) => {
+        // Update with filtered array
+        setInstitutions(filteredInstitutions);
+      },
+    });
   };
 
   const handleViewInstitution = (institution: Institution) => {
-    navigation.navigate('ViewInstitution', { institutionId: institution.id });
+    navigation.navigate('ViewInstitution', { 
+      institutionId: institution.id,
+      onSave: () => {
+        console.log('onSave callback triggered from view');
+        handleFetchInstitutions();
+      },
+    });
   };
 
   const handleEditInstitution = (institution: Institution) => {
     navigation.navigate('AddEditInstitution', {
-      institution,
+      institutionId: institution.id,
       isEditMode: true,
+      onSave: () => {
+        console.log('onSave callback triggered from edit');
+        handleFetchInstitutions();
+      },
     });
   };
 
-  // ================= TOGGLE STATUS =================
-  const handleToggleStatus = async (institution: Institution) => {
-    try {
-      const newStatus =
-        String(institution.status) === 'Active'
-          ? 'Inactive'
-          : 'Active';
+  // // ================= TOGGLE STATUS =================
+  // const handleToggleStatus = async (institution: Institution) => {
+  //   try {
+  //     const newStatus = institution.status === 'Active' ? 0 : 1;
 
-      await axios.put(`${API_URL}/${institution.id}`, {
-        status: newStatus,
-      });
+  //     await updateInstitution(institution.id, { status: newStatus });
 
-      Alert.alert('Success', 'Status updated');
+  //     setInstitutions(prev =>
+  //       prev.map(inst =>
+  //         inst.id === institution.id
+  //           ? { ...inst, status: newStatus === 1 ? 'Active' : 'Inactive' }
+  //           : inst,
+  //       ),
+  //     );
 
-      fetchInstitutions();
-    } catch (error) {
-      Alert.alert('Error', 'Unable to update status');
-    }
-  };
+  //     Alert.alert(
+  //       'Success',
+  //       `Status updated to ${newStatus === 1 ? 'Active' : 'Inactive'}`,
+  //     );
+  //   } catch (error) {
+  //     console.error('Error updating status:', error);
+  //     Alert.alert('Error', 'Failed to update status');
+  //   }
+  // };
+// ================= TOGGLE STATUS =================
+const handleToggleStatus = async (institution: Institution) => {
+  try {
+    await toggleInstitutionStatus(institution.id); // ✅ NEW API
+
+    // Reload latest data from backend
+    await handleFetchInstitutions();
+
+    Alert.alert('Success', 'Status updated successfully');
+  } catch (error) {
+    console.error('Error updating status:', error);
+    Alert.alert('Error', 'Failed to update status');
+  }
+};
 
   // ================= DELETE =================
   const handleDeleteInstitution = (institution: Institution) => {
@@ -138,13 +223,18 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
 
           onPress: async () => {
             try {
-              await axios.delete(`${API_URL}/${institution.id}`);
+              await deleteInstitution(institution.id);
+
+              setInstitutions(prev =>
+                prev.map(inst =>
+                  inst.id === institution.id ? { ...inst, isDeleted: true } : inst,
+                ),
+              );
 
               Alert.alert('Success', 'Institution deleted');
-
-              fetchInstitutions();
             } catch (error) {
-              Alert.alert('Error', 'Unable to delete');
+              console.error('Delete error:', error);
+              Alert.alert('Error', 'Failed to delete institution');
             }
           },
         },
@@ -153,81 +243,66 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
   };
 
   // ================= RENDER ROW =================
-  const renderInstitutionRow = ({ item,index,}: {
-    item: Institution;
-    index: number;
-  }) => (
-    <View style={styles.card}>
-      <View style={styles.rowContent}>
-        <View style={styles.column}>
-          <Text style={styles.slNo}>{index + 1}</Text>
-        </View>
+  const renderInstitutionRow = ({ item, index }: { item: Institution; index: number }) => (
+    <View style={styles.tableRow}>
+      <View style={[styles.tableCell, styles.slnoCell]}>
+        <Text style={styles.cellText}>{index + 1}</Text>
+      </View>
 
-        <View style={[styles.column, { flex: 2 }]}>
-          <Text style={styles.cellText} numberOfLines={1}>
-            
-            {item?.institutionName || 'N/A'}
-          </Text>
-        </View>
+      <View style={[styles.tableCell, styles.nameCell]}>
+        <Text style={styles.cellText} numberOfLines={1}>
+          {item?.institutionName || 'N/A'}
+        </Text>
+      </View>
 
-        <View style={[styles.column, { flex: 1.5 }]}>
-          <Text style={styles.cellText} numberOfLines={1}>
-            {item?.organizationId || 'N/A'}
-          </Text>
-        </View>
+      <View style={[styles.tableCell, styles.orgCell]}>
+        <Text style={styles.cellText} numberOfLines={1}>
+          {item?.organizationId || 'N/A'}
+        </Text>
+      </View>
 
-        <View style={[styles.column, { flex: 1.5 }]}>
-          <Text style={styles.cellText} numberOfLines={1}>
-            {item?.institutionUrl
-              ? item.institutionUrl.replace('https://', '')
-              : 'N/A'}
-          </Text>
-        </View>
+      <View style={[styles.tableCell, styles.urlCell]}>
+        <Text style={styles.cellText} numberOfLines={1}>
+          {item?.institutionUrl
+            ? item.institutionUrl.replace('https://', '')
+            : 'N/A'}
+        </Text>
+      </View>
 
-        {/* ✅ SAFE STATUS */}
-        <View style={[styles.column, { flex: 0.8 }]}>
-          <Text
-            style={[
-              styles.cellText,
-              {
-                color:
-                  String(item?.status) === 'Active'
-                    ? '#4CAF50'
-                    : '#ff9800',
-                fontWeight: '600',
-              },
-            ]}>
-            {String(item?.status ?? '-').charAt(0)}
-          </Text>
+      <View style={[styles.tableCell, styles.statusCell]}>
+        <View
+          style={[
+            styles.statusBadge,
+            { backgroundColor: item.status === 'Active' ? '#4CAF50' : '#f44336' },
+          ]}>
+          <Text style={styles.badgeText}>{item.status}</Text>
         </View>
       </View>
 
-      {/* ACTION BUTTONS */}
-      <View style={styles.actionButtons}>
+      <View style={[styles.tableCell, styles.actionCell]}>
         <TouchableOpacity
-          style={[styles.actionBtn, styles.viewBtn]}
+          style={styles.iconBtn}
           onPress={() => handleViewInstitution(item)}>
-          <Text style={styles.actionBtnText}>View</Text>
+          <Ionicons name="eye" size={20} color="#2196F3" />
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.actionBtn, styles.editBtn]}
+          style={styles.iconBtn}
           onPress={() => handleEditInstitution(item)}>
-          <Text style={styles.actionBtnText}>Edit</Text>
+          <Ionicons name="pencil" size={20} color="#FFC107" />
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.actionBtn, styles.toggleBtn]}
+          style={styles.iconBtn}
           onPress={() => handleToggleStatus(item)}>
-          <Text style={styles.actionBtnText}>
-            {String(item?.status) === 'Active' ? 'Deact.' : 'Act.'}
-          </Text>
+          <Ionicons
+            name={item.status === 'Active' ? 'checkmark-circle' : 'close-circle'}
+            size={20}
+            color={item.status === 'Active' ? '#4CAF50' : '#f44336'}
+          />
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.actionBtn, styles.deleteBtn]}
+          style={styles.iconBtn}
           onPress={() => handleDeleteInstitution(item)}>
-          <Text style={styles.actionBtnText}>Delete</Text>
+          <Ionicons name="trash" size={20} color="#f44336" />
         </TouchableOpacity>
       </View>
     </View>
@@ -284,33 +359,48 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
       </View>
 
       {/* TABLE HEADER */}
-      <View style={styles.tableHeader}>
-        <Text style={[styles.headerCell, { flex: 0.5 }]}>Sl</Text>
-        <Text style={[styles.headerCell, { flex: 2 }]}>Institution</Text>
-        <Text style={[styles.headerCell, { flex: 1.5 }]}>Organization</Text>
-        <Text style={[styles.headerCell, { flex: 1.5 }]}>Website</Text>
-        <Text style={[styles.headerCell, { flex: 0.8 }]}>Status</Text>
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={styles.tableContainer}>
+          <View style={styles.tableHeader}>
+            <View style={[styles.headerCell, styles.slnoCell]}>
+              <Text style={styles.headerText}>SL.NO</Text>
+            </View>
+            <View style={[styles.headerCell, styles.nameCell]}>
+              <Text style={styles.headerText}>Institution</Text>
+            </View>
+            <View style={[styles.headerCell, styles.orgCell]}>
+              <Text style={styles.headerText}>Organization</Text>
+            </View>
+            <View style={[styles.headerCell, styles.urlCell]}>
+              <Text style={styles.headerText}>Website</Text>
+            </View>
+            <View style={[styles.headerCell, styles.statusCell]}>
+              <Text style={styles.headerText}>Status</Text>
+            </View>
+            <View style={[styles.headerCell, styles.actionCell]}>
+              <Text style={styles.headerText}>Actions</Text>
+            </View>
+          </View>
 
-      {/* LIST */}
-      {loading ? (
-        <ActivityIndicator
-          size="large"
-          color={colors.primary}
-          style={{ marginTop: 30 }}
-        />
-      ) : filteredInstitutions.length > 0 ? (
-        <FlatList
-          data={filteredInstitutions}
-          renderItem={renderInstitutionRow}
-          keyExtractor={item => String(item.id)}
-          contentContainerStyle={styles.listContent}
-        />
-      ) : (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No institutions found</Text>
+          {/* LIST */}
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : filteredInstitutions.length > 0 ? (
+            <FlatList
+              data={filteredInstitutions}
+              renderItem={renderInstitutionRow}
+              keyExtractor={item => String(item.id)}
+              contentContainerStyle={styles.listContent}
+            />
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>No institutions found</Text>
+            </View>
+          )}
         </View>
-      )}
+      </ScrollView>
 
       {/* FOOTER */}
       <View style={styles.footerInfo}>
@@ -325,19 +415,28 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
 
 // ================= STYLES =================
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { 
+    flex: 1,
+    backgroundColor: '#f5f5f5',
+  },
 
   header: {
     padding: 16,
+    backgroundColor: '#fff',
     borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
 
   title: {
     fontSize: 24,
     fontWeight: 'bold',
+    color: '#333',
   },
 
-  searchContainer: { padding: 16 },
+  searchContainer: { 
+    padding: 16,
+    backgroundColor: '#fff',
+  },
 
   addButtonContainer: { padding: 16 },
 
@@ -348,81 +447,87 @@ const styles = StyleSheet.create({
 
   buttonHalf: { flex: 1 },
 
+  tableContainer: {
+    minWidth: 900,
+  },
+
   tableHeader: {
     flexDirection: 'row',
-    padding: 10,
     backgroundColor: '#007AFF',
-    marginHorizontal: 12,
-    borderTopLeftRadius: 8,
-    borderTopRightRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
   },
 
   headerCell: {
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+
+  headerText: {
     color: '#fff',
     fontWeight: 'bold',
+    fontSize: 14,
+  },
+
+  tableRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+
+  tableCell: {
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+
+  slnoCell: { width: 60 },
+  nameCell: { width: 200 },
+  orgCell: { width: 150 },
+  urlCell: { width: 200 },
+  statusCell: { width: 100 },
+  actionCell: { 
+    width: 180,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  cellText: { 
+    fontSize: 14,
+    color: '#333',
+  },
+
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+  },
+
+  badgeText: {
+    color: '#fff',
     fontSize: 12,
+    fontWeight: '600',
+  },
+
+  iconBtn: {
+    padding: 4,
+  },
+
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
   },
 
   listContent: {
-    paddingHorizontal: 12,
     paddingBottom: 12,
   },
 
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#eee',
-  },
-
-  rowContent: {
-    flexDirection: 'row',
-    padding: 10,
-    alignItems: 'center',
-    backgroundColor: '#fafafa',
-  },
-
-  column: {
-    flex: 1,
-    paddingHorizontal: 4,
-  },
-
-  slNo: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  cellText: { fontSize: 12 },
-
-  actionButtons: {
-    flexDirection: 'row',
-    padding: 8,
-    gap: 4,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 6,
-    borderRadius: 4,
-    alignItems: 'center',
-  },
-
-  viewBtn: { backgroundColor: '#e3f2fd' },
-  editBtn: { backgroundColor: '#f3e5f5' },
-  toggleBtn: { backgroundColor: '#e8f5e9' },
-  deleteBtn: { backgroundColor: '#ffebee' },
-
-  actionBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    padding: 40,
     alignItems: 'center',
   },
 
@@ -432,9 +537,10 @@ const styles = StyleSheet.create({
   },
 
   footerInfo: {
-    padding: 10,
+    padding: 12,
+    backgroundColor: '#fff',
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#e0e0e0',
   },
 
   infoText: {

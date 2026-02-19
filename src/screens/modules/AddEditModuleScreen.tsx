@@ -1,5 +1,6 @@
-import React, {useMemo, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   ScrollView,
@@ -9,7 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import {SystemModule} from '../../types/modules';
-import {moduleMockData} from '../../data/moduleMockData';
+import {fetchmodules, createmodule, updateModule} from '../../../api/module';
 import {Block, Button, Input, Modal, Text} from '../../components';
 import {useTheme} from '../../hooks';
 
@@ -62,11 +63,60 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
   const [showParentPicker, setShowParentPicker] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [showAccessPicker, setShowAccessPicker] = useState(false);
+  const [allModules, setAllModules] = useState<SystemModule[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingParents, setLoadingParents] = useState(true);
+
+  const normalizeModule = (raw: any): SystemModule => {
+    const typeRaw = raw.type ?? raw.module_type ?? '';
+    const accessRaw = raw.access_for ?? raw.accessFor ?? raw.access ?? '';
+    const parentId = raw.parent_module ?? raw.parent_module_id ?? raw.parentModuleId;
+    const isActiveValue = raw.is_active ?? raw.isActive ?? raw.status;
+    const isActive =
+      typeof isActiveValue === 'number'
+        ? isActiveValue === 1
+        : typeof isActiveValue === 'string'
+        ? isActiveValue.toLowerCase() === 'active' || isActiveValue === '1'
+        : !!isActiveValue;
+
+    return {
+      id: String(raw.id ?? ''),
+      moduleLabel: raw.module_label ?? raw.moduleLabel ?? '',
+      displayName: raw.module_display_name ?? raw.display_name ?? raw.displayName ?? '',
+      parentModuleId: parentId === null || parentId === undefined ? null : String(parentId),
+      priority: Number(raw.priority ?? 0),
+      icon: raw.icon ?? '',
+      fileUrl: raw.file_url ?? raw.fileUrl ?? '',
+      pageName: raw.page_name ?? raw.pageName ?? '',
+      type: String(typeRaw),
+      accessFor: String(accessRaw),
+      isActive,
+    };
+  };
+
+  useEffect(() => {
+    loadParentModules();
+  }, []);
+
+  const loadParentModules = async () => {
+    try {
+      setLoadingParents(true);
+      const response = await fetchmodules();
+      const rawList = response?.data ?? response ?? [];
+      const list = Array.isArray(rawList) ? rawList : [];
+      setAllModules(list.map(normalizeModule));
+    } catch (error) {
+      console.error('Error fetching modules for parent selection:', error);
+      Alert.alert('Error', 'Failed to load module list');
+    } finally {
+      setLoadingParents(false);
+    }
+  };
 
   const parentModuleOptions = useMemo(() => {
     return [
       {id: null, displayName: 'None (Root Module)'},
-      ...moduleMockData
+      ...allModules
         .filter(
           (m) =>
             m.parentModuleId === null &&
@@ -75,13 +125,13 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
         )
         .map((m) => ({id: m.id, displayName: m.displayName})),
     ];
-  }, [formData.id, formData.accessFor]);
+  }, [formData.id, formData.accessFor, allModules]);
 
   const updateField = (field: keyof SystemModule, value: any) => {
     setFormData((prev) => ({...prev, [field]: value}));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.moduleLabel.trim()) {
       Alert.alert('Validation Error', 'Module Label is required');
       return;
@@ -103,20 +153,52 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
       return;
     }
 
-    if (onSave) {
-      onSave(formData);
-    }
+    try {
+      setLoading(true);
+      const modulePayload = {
+        module_label: formData.moduleLabel,
+        module_display_name: formData.displayName,
+        icon: formData.icon,
+        file_url: formData.fileUrl,
+        page_name: formData.pageName,
+        priority: formData.priority,
+        parent_module: formData.parentModuleId,
+        type: formData.type,
+        access_for: formData.accessFor,
+        status: formData.isActive ? 1 : 0,
+      };
 
-    Alert.alert(
-      'Success',
-      `Module ${isEditMode ? 'updated' : 'created'} successfully`,
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.goBack(),
-        },
-      ],
-    );
+      if (isEditMode) {
+        // Update existing module
+        await updateModule(formData.id, modulePayload);
+        if (onSave) {
+          onSave(formData);
+        }
+      } else {
+        // Create new module
+        const response = await createmodule(modulePayload);
+        const createdModule = response?.data ?? response;
+        if (onSave && createdModule) {
+          onSave(normalizeModule(createdModule));
+        }
+      }
+
+      Alert.alert(
+        'Success',
+        `Module ${isEditMode ? 'updated' : 'created'} successfully`,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Error saving module:', error);
+      Alert.alert('Error', `Failed to ${isEditMode ? 'update' : 'create'} module`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderParentPicker = () => (
@@ -264,7 +346,7 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
 
   const getParentDisplayName = () => {
     if (formData.parentModuleId === null) return 'None (Root Module)';
-    const parent = moduleMockData.find((m) => m.id === formData.parentModuleId);
+    const parent = allModules.find((m) => m.id === formData.parentModuleId);
     return parent ? parent.displayName : 'None (Root Module)';
   };
 
@@ -376,12 +458,16 @@ export const AddEditModuleScreen: React.FC<AddEditModuleScreenProps> = ({
         </View>
 
         <View style={styles.buttonContainer}>
-          <Button gradient={gradients.primary} onPress={handleSave}>
-            <Text white bold>
-              {isEditMode ? 'Update Module' : 'Create Module'}
-            </Text>
+          <Button gradient={gradients.primary} onPress={handleSave} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text white bold>
+                {isEditMode ? 'Update Module' : 'Create Module'}
+              </Text>
+            )}
           </Button>
-          <Button gradient={gradients.primary} onPress={() => navigation.goBack()}>
+          <Button gradient={gradients.primary} onPress={() => navigation.goBack()} disabled={loading}>
             <Text white bold>
               Cancel
             </Text>

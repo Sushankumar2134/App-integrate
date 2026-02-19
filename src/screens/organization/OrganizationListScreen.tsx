@@ -1,15 +1,20 @@
 import React, {useMemo, useState, useEffect} from 'react';
 import {
   Alert,
-  FlatList,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   View,
   ActivityIndicator,
 } from 'react-native';
-import axios from 'axios';
-
+import {Ionicons} from '@expo/vector-icons';
 import {Organization} from '../../types/organization';
+import {
+  deleteOrganization,
+  fetchOrganizations,
+  updateOrganization,
+   toggleOrganizationStatus,
+} from '../../../api/organisation';
 import {Block, Button, Input, Text} from '../../components';
 import {useTheme} from '../../hooks';
 
@@ -26,10 +31,50 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
   const [searchText, setSearchText] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // ================= API =================
-
-  const API_URL =
-    'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/organizations';
+  const normalizeOrganization = (org: any): Organization => ({
+    id: org.id,
+    organizationName: org.name || '',
+    organizationType: org.type || '',
+    registrationNumber: org.registration_number || '',
+    gst: org.gst_number || '',
+    address: org.address || '',
+    city: org.city || '',
+    state: org.state || '',
+    country: org.country || '',
+    pincode: org.pincode || '',
+    contactNumber: org.contact_number || '',
+    email: org.email || '',
+    timeZone: org.timezone || '',
+    organizationUrl: org.organization_url || '',
+    institutionUrlSame: org.institution_url_same || false,
+    softwareWebsiteUrl: org.software_website_url || '',
+    loginTemplate: org.login_template || 'Standard',
+    logo: org.logo || '',
+    defaultLanguage: org.default_language || 'English',
+    adminName: org.admin_name || '',
+    adminEmail: org.admin_email || '',
+    adminMobile: org.admin_mobile || '',
+    status: org.status === 1 ? 'Active' : 'Inactive',
+    mouCopy: org.mou_copy || '',
+    poNumber: org.po_number || '',
+    poStartDate: org.po_start_date || '',
+    poEndDate: org.po_end_date || '',
+    subscriptionPlan: org.subscription_plan || 'Standard',
+    enabledModules: org.enabled_modules || [],
+    invoiceType: org.invoice_type || '',
+    invoiceFrequency: org.invoice_frequency || '',
+    paymentMode: org.payment_mode || '',
+    invoiceAmount: org.invoice_amount || '',
+    paymentStatus: org.payment_status || '',
+    paymentReceived: org.payment_received || false,
+    paymentDate: org.payment_date || '',
+    transactionReference: org.transaction_reference || '',
+    pocName: org.poc_name || '',
+    pocEmail: org.poc_email || '',
+    pocContact: org.poc_contact || '',
+    supportSLA: org.support_sla || '',
+    isDeleted: org.isDeleted || false,
+  });
 
   // ================= FETCH =================
 
@@ -37,78 +82,15 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
     try {
       setLoading(true);
 
-      const response = await axios.get(API_URL);
-
-      // ✅ Laravel returns { status, message, data: [] }
-      const list = response.data?.data || [];
+      const response = await fetchOrganizations();
+      const list = response?.data || [];
 
       if (!Array.isArray(list)) {
         console.log('Invalid API response:', response.data);
         return;
       }
 
-      const transformed: Organization[] = list.map((org: any) => ({
-        id: org.id,
-
-        organizationName: org.name || '',
-        organizationType: org.type || '',
-        registrationNumber: org.registration_number || '',
-
-        gst: org.gst_number || '',
-        address: org.address || '',
-        city: org.city || '',
-        state: org.state || '',
-        country: org.country || '',
-        pincode: org.pincode || '',
-
-        contactNumber: org.contact_number || '',
-        email: org.email || '',
-        timeZone: org.timezone || '',
-
-        organizationUrl: org.organization_url || '',
-        institutionUrlSame: org.institution_url_same || false,
-        softwareWebsiteUrl: org.software_website_url || '',
-
-        loginTemplate: org.login_template || 'Standard',
-        logo: org.logo || '',
-        defaultLanguage: org.default_language || 'English',
-
-        adminName: org.admin_name || '',
-        adminEmail: org.admin_email || '',
-        adminMobile: org.admin_mobile || '',
-
-        status: org.status === 1 ? 'Active' : 'Inactive',
-
-        mouCopy: org.mou_copy || '',
-        poNumber: org.po_number || '',
-        poStartDate: org.po_start_date || '',
-        poEndDate: org.po_end_date || '',
-
-        subscriptionPlan: org.subscription_plan || 'Standard',
-
-        enabledModules: org.enabled_modules || [],
-
-        invoiceType: org.invoice_type || '',
-        invoiceFrequency: org.invoice_frequency || '',
-        paymentMode: org.payment_mode || '',
-        invoiceAmount: org.invoice_amount || '',
-
-        paymentStatus: org.payment_status || '',
-        paymentReceived: org.payment_received || false,
-        paymentDate: org.payment_date || '',
-
-        transactionReference: org.transaction_reference || '',
-
-        pocName: org.poc_name || '',
-        pocEmail: org.poc_email || '',
-        pocContact: org.poc_contact || '',
-
-        supportSLA: org.support_sla || '',
-
-        isDeleted: !!org.deleted_at,
-      }));
-
-      setOrganizations(transformed);
+      setOrganizations(list.map(normalizeOrganization));
     } catch (error) {
       console.error('Error fetching organizations:', error);
       Alert.alert('Error', 'Failed to load organizations');
@@ -126,11 +108,13 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
   // ================= SEARCH =================
 
   const filteredOrganizations = useMemo(() => {
-    return organizations.filter(org =>
-      (org.organizationName || '')
-        .toLowerCase()
-        .includes(searchText.toLowerCase()),
-    );
+    return organizations
+      .filter(org => !org.isDeleted)
+      .filter(org =>
+        (org.organizationName || '')
+          .toLowerCase()
+          .includes(searchText.toLowerCase()),
+      );
   }, [organizations, searchText]);
 
   // ================= HANDLERS =================
@@ -139,52 +123,69 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
     navigation.navigate('AddEditOrganization', {
       organizationId: null,
       isEditMode: false,
+      onSave: handleFetchOrganizations,
     });
   };
 
   const handleView = (organization: Organization) => {
     navigation.navigate('ViewOrganization', {
       organizationId: organization.id,
+      onSave: handleFetchOrganizations,
     });
   };
 
   const handleEdit = (organization: Organization) => {
     navigation.navigate('AddEditOrganization', {
       organizationId: organization.id,
+      organization,
       isEditMode: true,
+      onSave: handleFetchOrganizations,
     });
   };
 
-  const handleToggleStatus = async (organization: Organization) => {
+  const handleToggleStatus = async (org: Organization) => {
     try {
-      const newStatus = organization.status === 'Active' ? 0 : 1;
+      await toggleOrganizationStatus(org.id);
 
-      await axios.put(`${API_URL}/${organization.id}`, {
-        status: newStatus,
-      });
+      // Reload latest data from backend - same as institution
+      await handleFetchOrganizations();
 
-      setOrganizations(prev =>
-        prev.map(org =>
-          org.id === organization.id
-            ? {
-                ...org,
-                status: newStatus === 1 ? 'Active' : 'Inactive',
-              }
-            : org,
-        ),
-      );
-
-      Alert.alert(
-        'Success',
-        `Status updated to ${
-          newStatus === 1 ? 'Active' : 'Inactive'
-        }`,
-      );
+      Alert.alert('Success', 'Status updated successfully');
     } catch (error) {
-      console.error('Error updating status:', error);
+      console.error('Toggle error:', error);
       Alert.alert('Error', 'Failed to update status');
     }
   };
+
+
+  // const handleToggleStatus = async (organization: Organization) => {
+  //   try {
+  //     const newStatus = organization.status === 'Active' ? 0 : 1;
+
+  //     await updateOrganization(organization.id, {status: newStatus});
+
+  //     setOrganizations(prev =>
+  //       prev.map(org =>
+  //         org.id === organization.id
+  //           ? {
+  //               ...org,
+  //               status: newStatus === 1 ? 'Active' : 'Inactive',
+  //             }
+  //           : org,
+  //       ),
+  //     );
+
+  //     Alert.alert(
+  //       'Success',
+  //       `Status updated to ${
+  //         newStatus === 1 ? 'Active' : 'Inactive'
+  //       }`,
+  //     );
+  //   } catch (error) {
+  //     console.error('Error updating status:', error);
+  //     Alert.alert('Error', 'Failed to update status');
+  //   }
+  
 
   const handleDeleteOrganization = (organization: Organization) => {
     Alert.alert(
@@ -197,13 +198,13 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
           style: 'destructive',
           onPress: async () => {
             try {
-              await axios.delete(
-                `${API_URL}/${organization.id}`,
-              );
+              await deleteOrganization(organization.id);
 
               setOrganizations(prev =>
-                prev.filter(
-                  org => org.id !== organization.id,
+                prev.map(org =>
+                  org.id === organization.id
+                    ? {...org, isDeleted: true}
+                    : org,
                 ),
               );
 
@@ -221,62 +222,71 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
     );
   };
 
-  // ================= ROW =================
+  const handleViewDeleted = () => {
+    const deletedOrgs = organizations.filter(org => org.isDeleted);
+    navigation.navigate('DeletedOrganization', {
+      deletedOrganizations: deletedOrgs,
+      onRestore: (restored: Organization[]) => {
+        setOrganizations(restored);
+      },
+      onDelete: (filtered: Organization[]) => {
+        setOrganizations(filtered);
+      },
+    });
+  };
 
-  const renderRow = ({item}: {item: Organization}) => (
-    <View style={styles.card}>
-      <View style={styles.rowTop}>
-        <View style={styles.rowLeft}>
-          <Text style={styles.orgName}>
-            {item.organizationName}
-          </Text>
-          <Text style={styles.orgMeta}>
-            {item.organizationType}
-          </Text>
-          <Text style={styles.orgMeta}>{item.city}</Text>
-        </View>
+  // ================= TABLE ROW =================
 
-        <Text
-          style={[
-            styles.status,
-            {
-              color:
-                item.status === 'Active'
-                  ? '#2e7d32'
-                  : '#ef6c00',
-            },
-          ]}>
-          {item.status}
-        </Text>
+  const renderTableRow = (item: Organization, index: number) => (
+    <View key={item.id} style={styles.tableRow}>
+      <View style={[styles.tableCell, styles.slnoCell]}>
+        <Text style={styles.cellText}>{index + 1}</Text>
       </View>
-
-      <View style={styles.actionRow}>
+      <View style={[styles.tableCell, styles.nameCell]}>
+        <Text style={styles.cellText}>{item.organizationName}</Text>
+      </View>
+      <View style={[styles.tableCell, styles.typeCell]}>
+        <Text style={styles.cellText}>{item.organizationType}</Text>
+      </View>
+      <View style={[styles.tableCell, styles.emailCell]}>
+        <Text style={styles.cellText}>{item.email}</Text>
+      </View>
+      <View style={[styles.tableCell, styles.planCell]}>
+        <Text style={styles.cellText}>{item.subscriptionPlan}</Text>
+      </View>
+      <View style={[styles.tableCell, styles.statusCell]}>
+        <View
+          style={[
+            styles.statusBadge,
+            {backgroundColor: item.status === 'Active' ? '#4CAF50' : '#f44336'},
+          ]}>
+          <Text style={styles.badgeText}>{item.status}</Text>
+        </View>
+      </View>
+      <View style={[styles.tableCell, styles.actionCell]}>
         <TouchableOpacity
-          style={[styles.actionBtn, styles.viewBtn]}
+          style={styles.iconBtn}
           onPress={() => handleView(item)}>
-          <Text style={styles.actionText}>View</Text>
+          <Ionicons name="eye" size={20} color="#2196F3" />
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.actionBtn, styles.editBtn]}
+          style={styles.iconBtn}
           onPress={() => handleEdit(item)}>
-          <Text style={styles.actionText}>Edit</Text>
+          <Ionicons name="pencil" size={20} color="#FFC107" />
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.actionBtn, styles.statusBtn]}
+          style={styles.iconBtn}
           onPress={() => handleToggleStatus(item)}>
-          <Text style={styles.actionText}>
-            {item.status === 'Active'
-              ? 'Deactivate'
-              : 'Activate'}
-          </Text>
+          <Ionicons
+            name={item.status === 'Active' ? 'checkmark-circle' : 'close-circle'}
+            size={20}
+            color={item.status === 'Active' ? '#4CAF50' : '#f44336'}
+          />
         </TouchableOpacity>
-
         <TouchableOpacity
-          style={[styles.actionBtn, styles.deleteBtn]}
+          style={styles.iconBtn}
           onPress={() => handleDeleteOrganization(item)}>
-          <Text style={styles.actionText}>Delete</Text>
+          <Ionicons name="trash" size={20} color="#f44336" />
         </TouchableOpacity>
       </View>
     </View>
@@ -324,6 +334,14 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
         <View style={styles.buttonRow}>
           <Button
             gradient={gradients.primary}
+            onPress={handleViewDeleted}
+            style={styles.buttonHalf}>
+            <Text white bold>
+              Deleted Organizations
+            </Text>
+          </Button>
+          <Button
+            gradient={gradients.primary}
             onPress={handleAdd}
             style={styles.buttonHalf}>
             <Text white bold>
@@ -336,12 +354,37 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
       {/* LIST */}
 
       {filteredOrganizations.length > 0 ? (
-        <FlatList
-          data={filteredOrganizations}
-          renderItem={renderRow}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContent}
-        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={true}>
+          <View>
+            <View style={styles.tableHeader}>
+              <View style={[styles.tableHeaderCell, styles.slnoCell]}>
+                <Text style={styles.headerText}>SL.NO</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.nameCell]}>
+                <Text style={styles.headerText}>Organization Name</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.typeCell]}>
+                <Text style={styles.headerText}>Type</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.emailCell]}>
+                <Text style={styles.headerText}>Email</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.planCell]}>
+                <Text style={styles.headerText}>Plan</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.statusCell]}>
+                <Text style={styles.headerText}>Status</Text>
+              </View>
+              <View style={[styles.tableHeaderCell, styles.actionCell]}>
+                <Text style={styles.headerText}>Actions</Text>
+              </View>
+            </View>
+
+            {filteredOrganizations.map((item, index) =>
+              renderTableRow(item, index),
+            )}
+          </View>
+        </ScrollView>
       ) : (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>
@@ -399,75 +442,82 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 
-  listContent: {
-    padding: 12,
+  tableHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderBottomWidth: 2,
+    borderBottomColor: '#2196F3',
   },
-
-  card: {
+  tableHeaderCell: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#e0e0e0',
+  },
+  headerText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#2196F3',
+  },
+  tableRow: {
+    flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#eee',
-    padding: 12,
-    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
   },
-
-  rowTop: {
+  tableCell: {
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#e0e0e0',
+  },
+  slnoCell: {
+    width: 60,
+  },
+  nameCell: {
+    width: 170,
+  },
+  typeCell: {
+    width: 100,
+  },
+  emailCell: {
+    width: 200,
+  },
+  planCell: {
+    width: 110,
+  },
+  statusCell: {
+    width: 110,
+  },
+  actionCell: {
+    width: 150,
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-
-  rowLeft: {
-    flex: 1,
-  },
-
-  orgName: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-
-  orgMeta: {
-    fontSize: 12,
-    color: '#666',
-  },
-
-  status: {
-    fontSize: 12,
-    fontWeight: '700',
-  },
-
-  actionRow: {
-    flexDirection: 'row',
-    marginTop: 10,
-    gap: 6,
-  },
-
-  actionBtn: {
-    flex: 1,
-    borderRadius: 6,
-    paddingVertical: 8,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-
-  viewBtn: {
-    backgroundColor: '#e3f2fd',
+  cellText: {
+    fontSize: 13,
+    color: '#333',
   },
-
-  editBtn: {
-    backgroundColor: '#f3e5f5',
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    alignItems: 'center',
   },
-
-  statusBtn: {
-    backgroundColor: '#e8f5e9',
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
   },
-
-  deleteBtn: {
-    backgroundColor: '#ffebee',
-  },
-
-  actionText: {
-    fontSize: 12,
-    fontWeight: '600',
+  iconBtn: {
+    padding: 6,
+    marginHorizontal: 4,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   emptyState: {

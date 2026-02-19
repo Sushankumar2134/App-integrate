@@ -8,11 +8,17 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import axios from 'axios';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { Institution } from '../../types/institution';
 import { Block, Button, Text } from '../../components';
 import { useTheme } from '../../hooks';
+import {
+  fetchInstitutionById,
+  deleteInstitution,
+  updateInstitution,
+  restoreInstitution,
+} from '../../../api/institution';
 
 interface ViewInstitutionScreenProps {
   navigation: any;
@@ -24,23 +30,66 @@ const ViewInstitutionScreen: React.FC<ViewInstitutionScreenProps> = ({
   route,
 }) => {
   const { colors, gradients, sizes } = useTheme();
-  const { institutionId } = route.params;
+  const { institutionId, onSave } = route.params;
   const [institution, setInstitution] = React.useState<Institution | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [actionLoading, setActionLoading] = React.useState(false);
 
-  const API_URL =
-    'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/institutions';
+  // ================= NORMALIZE =================
+  const normalizeInstitution = (data: any): Institution => ({
+    id: data.id,
+    institutionName: data.name || '',
+    institutionCode: data.code || '',
+    organizationId: data.organization_id || '',
+    gst: data.gst_number || '',
+    address: data.address || '',
+    city: data.city || '',
+    state: data.state || '',
+    country: data.country || '',
+    pincode: data.pincode || '',
+    contactNumber: data.contact_number || '',
+    email: data.email || '',
+    timeZone: data.timezone || '',
+    institutionUrl: data.institution_url || '',
+    loginTemplate: data.login_template || '',
+    logo: data.logo || '',
+    defaultLanguage: data.default_language || '',
+    adminName: data.admin_name || '',
+    adminEmail: data.admin_email || '',
+    adminMobile: data.admin_mobile || '',
+    role: data.role || '',
+    status: data.status === 1 ? 'Active' : 'Inactive',
+    mouCopy: data.mou_copy || '',
+    poNumber: data.po_number || '',
+    poStartDate: data.po_start_date || '',
+    poEndDate: data.po_end_date || '',
+    subscriptionPlan: data.subscription_plan || '',
+    modules: data.modules || [],
+    invoiceType: data.invoice_type || '',
+    invoiceFrequency: data.invoice_frequency || '',
+    paymentMode: data.payment_mode || '',
+    invoiceAmount: data.invoice_amount || '',
+    paymentStatus: data.payment_status || '',
+    paymentReceived: data.payment_received === true || data.payment_received === 1 ? 'Yes' : 'No',
+    paymentDate: data.payment_date || '',
+    transactionReference: data.transaction_reference || '',
+    pocName: data.poc_name || '',
+    pocEmail: data.poc_email || '',
+    pocContact: data.poc_contact || '',
+    supportSLA: data.support_sla || '',
+    isDeleted: data.deleted_at !== null || data.is_deleted === true || data.is_deleted === 1,
+  });
 
   // ================= FORMAT DATE FUNCTION =================
   const formatDateToIndian = (dateString: string | undefined): string => {
     if (!dateString) return 'N/A';
     try {
       const date = new Date(dateString);
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      const month = months[date.getMonth()];
+      const day = date.getDate(); // No padding for day
       const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
+      return `${month}-${day}-${year}`;
     } catch {
       return 'N/A';
     }
@@ -56,61 +105,10 @@ const ViewInstitutionScreen: React.FC<ViewInstitutionScreenProps> = ({
   const fetchInstitutionData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/${institutionId}`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await fetchInstitutionById(institutionId);
 
-      // Handle the response - could be { data: {...} } or direct object
-      const data = response.data.data || response.data;
-      
-      // Transform API response to Institution type
-      const formattedData: Institution = {
-        id: data.id,
-        institutionName: data.name,
-        institutionCode: data.code,
-        organizationId: data.organization_id,
-        gst: data.gst_number,
-        address: data.address,
-        city: data.city,
-        state: data.state,
-        country: data.country,
-        pincode: data.pincode,
-        contactNumber: data.contact_number,
-        email: data.email,
-        timeZone: data.timezone,
-        institutionUrl: data.institution_url,
-        loginTemplate: data.login_template,
-        logo: data.logo,
-        defaultLanguage: data.default_language,
-        adminName: data.admin_name,
-        adminEmail: data.admin_email,
-        adminMobile: data.admin_mobile,
-        role: data.role,
-        status: data.status === 1 ? 'Active' : 'Inactive',
-        mouCopy: data.mou_copy,
-        poNumber: data.po_number,
-        poStartDate: data.po_start_date,
-        poEndDate: data.po_end_date,
-        subscriptionPlan: data.subscription_plan,
-        modules: data.modules || [],
-        invoiceType: data.invoice_type,
-        invoiceFrequency: data.invoice_frequency,
-        paymentMode: data.payment_mode,
-        invoiceAmount: data.invoice_amount,
-        paymentStatus: data.payment_status,
-        paymentReceived: String(data.payment_received),
-        paymentDate: data.payment_date,
-        transactionReference: data.transaction_reference,
-        pocName: data.poc_name,
-        pocEmail: data.poc_email,
-        pocContact: data.poc_contact,
-        supportSLA: data.support_sla,
-        isDeleted: data.deleted_at !== null,
-      };
-
-      setInstitution(formattedData);
+      const data = response.data || response;
+      setInstitution(normalizeInstitution(data));
     } catch (error) {
       console.error('Error fetching institution:', error);
       Alert.alert('Error', 'Unable to load institution details');
@@ -125,12 +123,25 @@ const ViewInstitutionScreen: React.FC<ViewInstitutionScreenProps> = ({
     fetchInstitutionData();
   }, [institutionId]);
 
+  // ================= REFRESH ON FOCUS =================
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('ViewInstitutionScreen focused - refreshing...');
+      fetchInstitutionData();
+    }, [institutionId])
+  );
+
   // ================= HANDLERS =================
   const handleEditInstitution = () => {
     if (institution) {
       navigation.navigate('AddEditInstitution', {
+        institutionId: institution.id,
         institution,
         isEditMode: true,
+        onSave: () => {
+          fetchInstitutionData();
+          onSave?.();
+        },
       });
     }
   };
@@ -138,22 +149,58 @@ const ViewInstitutionScreen: React.FC<ViewInstitutionScreenProps> = ({
   const handleDeleteInstitution = () => {
     if (!institution) return;
     
+    const deleteText = institution.isDeleted ? 'Permanently Delete' : 'Delete';
+    const deleteMessage = institution.isDeleted 
+      ? `This will permanently delete "${institution?.institutionName}". This action cannot be undone.`
+      : `Are you sure you want to delete "${institution?.institutionName}"?`;
+    
     Alert.alert(
-      'Delete Institution',
-      `Are you sure you want to delete "${institution?.institutionName}"?`,
+      deleteText,
+      deleteMessage,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
+          text: deleteText,
           style: 'destructive',
           onPress: async () => {
             try {
               setActionLoading(true);
-              await axios.delete(`${API_URL}/${institution?.id}`);
+              await deleteInstitution(institution.id);
               Alert.alert('Success', 'Institution deleted successfully');
+              onSave?.();
               navigation.goBack();
             } catch (error) {
+              console.error('Delete error:', error);
               Alert.alert('Error', 'Unable to delete institution');
+            } finally {
+              setActionLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleRestoreInstitution = () => {
+    if (!institution || !institution.isDeleted) return;
+    
+    Alert.alert(
+      'Restore Institution',
+      `Restore "${institution?.institutionName}" to active list?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          onPress: async () => {
+            try {
+              setActionLoading(true);
+              await restoreInstitution(institution.id);
+              Alert.alert('Success', 'Institution restored successfully');
+              onSave?.();
+              navigation.goBack();
+            } catch (error) {
+              console.error('Restore error:', error);
+              Alert.alert('Error', 'Unable to restore institution');
             } finally {
               setActionLoading(false);
             }
@@ -168,17 +215,19 @@ const ViewInstitutionScreen: React.FC<ViewInstitutionScreenProps> = ({
     
     try {
       setActionLoading(true);
-      const newStatus =
-        String(institution?.status) === 'Active' ? 'Inactive' : 'Active';
+      const newStatus = institution.status === 'Active' ? 0 : 1;
 
-      await axios.put(`${API_URL}/${institution?.id}`, {
-        status: newStatus,
-      });
+      await updateInstitution(institution.id, { status: newStatus });
 
-      Alert.alert('Success', `Status changed to ${newStatus}`);
-      // Refresh the data
+      Alert.alert(
+        'Success',
+        `Status changed to ${newStatus === 1 ? 'Active' : 'Inactive'}`,
+      );
+      
       await fetchInstitutionData();
+      onSave?.();
     } catch (error) {
+      console.error('Status update error:', error);
       Alert.alert('Error', 'Unable to update status');
     } finally {
       setActionLoading(false);
@@ -383,41 +432,75 @@ const ViewInstitutionScreen: React.FC<ViewInstitutionScreenProps> = ({
 
       {/* ACTION BUTTONS */}
       <View style={[styles.actionContainer, { backgroundColor: colors.card }]}>
-        <Button
-          gradient={gradients.primary}
-          onPress={handleEditInstitution}
-          style={styles.actionButton}
-          disabled={actionLoading}>
-          <Text white bold>
-            Edit
-          </Text>
-        </Button>
+        {!institution?.isDeleted && (
+          <>
+            <Button
+              gradient={gradients.primary}
+              onPress={handleEditInstitution}
+              style={styles.actionButton}
+              disabled={actionLoading}>
+              <Text white bold>
+                Edit
+              </Text>
+            </Button>
 
-        <Button
-          gradient={gradients.warning}
-          onPress={handleToggleStatus}
-          style={styles.actionButton}
-          disabled={actionLoading}>
-          <Text white bold>
-            {String(institution?.status) === 'Active'
-              ? 'Deactivate'
-              : 'Activate'}
-          </Text>
-        </Button>
+            <Button
+              gradient={gradients.warning}
+              onPress={handleToggleStatus}
+              style={styles.actionButton}
+              disabled={actionLoading}>
+              <Text white bold>
+                {String(institution?.status) === 'Active'
+                  ? 'Deactivate'
+                  : 'Activate'}
+              </Text>
+            </Button>
 
-        <Button
-          gradient={gradients.danger}
-          onPress={handleDeleteInstitution}
-          style={styles.actionButton}
-          disabled={actionLoading}>
-          {actionLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text white bold>
-              Delete
-            </Text>
-          )}
-        </Button>
+            <Button
+              gradient={gradients.danger}
+              onPress={handleDeleteInstitution}
+              style={styles.actionButton}
+              disabled={actionLoading}>
+              {actionLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text white bold>
+                  Delete
+                </Text>
+              )}
+            </Button>
+          </>
+        )}
+        {institution?.isDeleted && (
+          <>
+            <Button
+              gradient={gradients.primary}
+              onPress={handleRestoreInstitution}
+              style={styles.actionButton}
+              disabled={actionLoading}>
+              {actionLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text white bold>
+                  Restore
+                </Text>
+              )}
+            </Button>
+            <Button
+              gradient={gradients.danger}
+              onPress={handleDeleteInstitution}
+              style={styles.actionButton}
+              disabled={actionLoading}>
+              {actionLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text white bold>
+                  Permanent Delete
+                </Text>
+              )}
+            </Button>
+          </>
+        )}
       </View>
         </>
       )}

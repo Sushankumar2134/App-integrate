@@ -7,7 +7,8 @@ export interface SystemModule {
   icon: string;
   fileUrl: string;
   pageName: string;
-  type: 'web' | 'app' | 'both';
-  accessFor: 'Institution' | 'Service';
+  type: string;
+  accessFor: string;
   isActive: boolean;
+  isDeleted?: boolean;
 }

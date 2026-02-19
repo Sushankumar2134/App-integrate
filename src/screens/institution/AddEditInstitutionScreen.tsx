@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
   Alert,
   FlatList,
@@ -7,14 +7,23 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  Image,
 } from 'react-native';
-import axios from 'axios';
+import * as ImagePicker from 'expo-image-picker';
+import {AxiosError} from 'axios';
 import {Institution} from '../../types/institution';
-import {institutionMockData} from '../../data/institutionMockData';
 import {Block, Modal, Switch, Text} from '../../components';
 import FormInput from '../../components/FormInput';
 import PrimaryButton from '../../components/PrimaryButton';
 import {useTheme} from '../../hooks';
+import {
+  createInstitution,
+  updateInstitution,
+  fetchInstitutions,
+  fetchInstitutionById,
+} from '../../../api/institution';
+import {fetchOrganizations} from '../../../api/organisation';
+import {fetchmodules} from '../../../api/module';
 
 interface AddEditInstitutionScreenProps {
   navigation: any;
@@ -29,7 +38,7 @@ const TIMEZONES = [
   'PST (UTC-8)',
   'GMT (UTC+0)',
 ];
-const SUBSCRIPTION_PLANS = ['Starter', 'Professional', 'Enterprise', 'Enterprise Plus'];
+const SUBSCRIPTION_PLANS = ['Basic', 'Standard', 'Premium', 'Enterprise'];
 const MODULES = [
   'OPD',
   'IPD',
@@ -41,9 +50,9 @@ const MODULES = [
   'Radiology',
 ];
 const INVOICE_TYPES = ['Monthly', 'Quarterly', 'Annual'];
-const PAYMENT_MODES = ['Bank Transfer', 'Check', 'Online', 'Credit Card'];
-const PAYMENT_STATUSES = ['Pending', 'Partial', 'Paid'];
-const ROLES = ['Administrator', 'Manager', 'Supervisor', 'Staff'];
+const PAYMENT_MODES = ['Bank Transfer', 'Cheque', 'Online', 'Credit Card'];
+const PAYMENT_STATUSES = ['Pending', 'Paid', 'Partially Paid', 'Overdue', 'Cancelled'];
+const PAYMENT_RECEIVED_OPTIONS = ['No', 'Yes'];
 
 const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
   navigation,
@@ -52,7 +61,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
   const {colors} = useTheme();
   const {height} = useWindowDimensions();
   const modalMaxHeight = Math.max(240, height * 0.55);
-  const {institution, isEditMode = false} = route.params;
+  const {institutionId, institution, isEditMode = false, onSave} = route.params || {};
 
   const [formData, setFormData] = useState<Institution>(
     institution || {
@@ -82,14 +91,14 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
       poNumber: '',
       poStartDate: '',
       poEndDate: '',
-      subscriptionPlan: 'Professional',
+      subscriptionPlan: 'Basic',
       modules: [],
       invoiceType: 'Monthly',
       invoiceFrequency: 'Monthly',
       paymentMode: 'Bank Transfer',
-      invoiceAmount: '',
+      invoiceAmount: '0.02',
       paymentStatus: 'Pending',
-      paymentReceived: '',
+      paymentReceived: 'No',
       paymentDate: '',
       transactionReference: '',
       pocName: '',
@@ -100,16 +109,126 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
     },
   );
 
+  const [organizations, setOrganizations] = useState<any[]>([]);
+  const [availableModules, setAvailableModules] = useState<any[]>([]);
   const [pickerModal, setPickerModal] = useState<{
     field: string;
     options: string[];
   } | null>(null);
 
+  const [organizationModal, setOrganizationModal] = useState(false);
   const [modulesModal, setModulesModal] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const API_URL =
-    'https://tamala-unsighing-quadrennially.ngrok-free.dev/api/institutions';
+  // ================= FETCH ORGANIZATIONS =================
+  useEffect(() => {
+    const loadOrganizations = async () => {
+      try {
+        const response = await fetchOrganizations();
+        const list = response?.data || [];
+        setOrganizations(list);
+      } catch (error) {
+        console.error('Error loading organizations:', error);
+      }
+    };
+
+    loadOrganizations();
+  }, []);
+
+  // ================= FETCH MODULES FOR ROLES =================
+  useEffect(() => {
+    const loadModules = async () => {
+      try {
+        const response = await fetchmodules();
+        const list = Array.isArray(response?.data) 
+          ? response.data 
+          : response?.data?.data || [];
+        setAvailableModules(list);
+      } catch (error) {
+        console.error('Error loading modules:', error);
+      }
+    };
+
+    loadModules();
+  }, []);
+
+  // ================= LOAD INSTITUTION FOR EDIT =================
+  useEffect(() => {
+    const loadInstitution = async () => {
+      if (isEditMode && institutionId) {
+        try {
+          const response = await fetchInstitutionById(institutionId);
+          const data = response.data || response;
+          
+          setFormData({
+            id: data.id,
+            institutionName: data.name || '',
+            institutionCode: data.code || '',
+            organizationId: data.organization_id || '',
+            gst: data.gst_number || '',
+            address: data.address || '',
+            city: data.city || '',
+            state: data.state || '',
+            country: data.country || '',
+            pincode: data.pincode || '',
+            contactNumber: data.contact_number || '',
+            email: data.email || '',
+            timeZone: data.timezone || 'IST (UTC+5:30)',
+            institutionUrl: data.institution_url || '',
+            loginTemplate: data.login_template || 'Standard',
+            logo: data.logo || '',
+            defaultLanguage: data.default_language || 'English',
+            adminName: data.admin_name || '',
+            adminEmail: data.admin_email || '',
+            adminMobile: data.admin_mobile || '',
+            role: data.role || 'Administrator',
+            status: data.status === 1 ? 'Active' : 'Inactive',
+            mouCopy: data.mou_copy || '',
+            poNumber: data.po_number || '',
+            poStartDate: data.po_start_date || '',
+            poEndDate: data.po_end_date || '',
+            subscriptionPlan: data.subscription_plan || 'Basic',
+            modules: data.modules || [],
+            invoiceType: data.invoice_type || 'Monthly',
+            invoiceFrequency: data.invoice_frequency || 'Monthly',
+            paymentMode: data.payment_mode || 'Bank Transfer',
+            invoiceAmount: data.invoice_amount || '0.02',
+            paymentStatus: data.payment_status || 'Pending',
+            paymentReceived: data.payment_received === true || data.payment_received === 'true' || data.payment_received === 1 ? 'Yes' : 'No',
+            paymentDate: data.payment_date || '',
+            transactionReference: data.transaction_reference || '',
+            pocName: data.poc_name || '',
+            pocEmail: data.poc_email || '',
+            pocContact: data.poc_contact || '',
+            supportSLA: data.support_sla || '',
+            isDeleted: data.deleted_at !== null,
+          });
+        } catch (error) {
+          console.error('Error loading institution:', error);
+          Alert.alert('Error', 'Failed to load institution data');
+        }
+      }
+    };
+
+    loadInstitution();
+  }, [institutionId, isEditMode]);
+
+  // ================= ERROR MESSAGE HELPER =================
+  const getErrorMessage = (error: any): string => {
+    if (error instanceof AxiosError) {
+      return error.response?.data?.message || 'Failed to save institution';
+    }
+    return 'An unexpected error occurred';
+  };
+
+  // Convert mm/dd/yyyy to yyyy-mm-dd for API
+  const convertDateToAPI = (dateString: string): string => {
+    if (!dateString || dateString.length !== 10) return '';
+    const parts = dateString.split('/');
+    if (parts.length !== 3) return '';
+    const [month, day, year] = parts;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  };
 
   const handleInputChange = (field: keyof Institution, value: string) => {
     setFormData({...formData, [field]: value});
@@ -167,8 +286,8 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         status: formData.status === 'Active' ? 1 : 0,
         mou_copy: formData.mouCopy,
         po_number: formData.poNumber,
-        po_start_date: formData.poStartDate,
-        po_end_date: formData.poEndDate,
+        po_start_date: convertDateToAPI(formData.poStartDate),
+        po_end_date: convertDateToAPI(formData.poEndDate),
         subscription_plan: formData.subscriptionPlan,
         modules: formData.modules,
         invoice_type: formData.invoiceType,
@@ -176,8 +295,8 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         payment_mode: formData.paymentMode,
         invoice_amount: formData.invoiceAmount,
         payment_status: formData.paymentStatus,
-        payment_received: formData.paymentReceived,
-        payment_date: formData.paymentDate,
+        payment_received: formData.paymentReceived === 'Yes' ? true : false,
+        payment_date: convertDateToAPI(formData.paymentDate),
         transaction_reference: formData.transactionReference,
         poc_name: formData.pocName,
         poc_email: formData.pocEmail,
@@ -185,39 +304,47 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         support_sla: formData.supportSLA,
       };
 
-      if (isEditMode && formData.id) {
+      if (isEditMode && institutionId) {
         // Update existing institution
-        await axios.put(`${API_URL}/${formData.id}`, apiData, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        console.log('Updating institution:', institutionId, apiData);
+        await updateInstitution(institutionId, apiData);
+        
+        // Call onSave callback before navigation
+        if (onSave) {
+          onSave();
+        }
+        
         Alert.alert('Success', 'Institution updated successfully!', [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: () => {
+              navigation.goBack();
+            },
           },
         ]);
       } else {
         // Create new institution
-        await axios.post(API_URL, apiData, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+        console.log('Creating new institution:', apiData);
+        await createInstitution(apiData);
+        
+        // Call onSave callback before navigation
+        if (onSave) {
+          onSave();
+        }
+        
         Alert.alert('Success', 'Institution added successfully!', [
           {
             text: 'OK',
-            onPress: () => navigation.goBack(),
+            onPress: () => {
+              navigation.goBack();
+            },
           },
         ]);
       }
     } catch (error) {
       console.error('Error saving institution:', error);
-      Alert.alert(
-        'Error',
-        'Failed to save institution. Please try again.',
-      );
+      const errorMessage = getErrorMessage(error);
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -240,6 +367,56 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
 
   const openPicker = (field: string, options: string[]) => {
     setPickerModal({field, options});
+  };
+
+  const handleOrganizationSelect = (org: any) => {
+    setFormData({...formData, organizationId: org.id.toString()});
+    setOrganizationModal(false);
+  };
+
+  const getSelectedOrganizationName = () => {
+    const selected = organizations.find(org => org.id.toString() === formData.organizationId);
+    return selected ? selected.name : 'Select Organization';
+  };
+
+  const formatDateInput = (text: string, field: keyof Institution) => {
+    // Remove non-numeric characters
+    const cleaned = text.replace(/[^0-9]/g, '');
+    
+    let formatted = cleaned;
+    if (cleaned.length >= 2) {
+      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
+    }
+    if (cleaned.length >= 4) {
+      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2, 4) + '/' + cleaned.slice(4, 8);
+    }
+    
+    handleInputChange(field, formatted);
+  };
+
+  const pickImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        handleInputChange('logo', result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
   };
 
   const renderSectionTitle = (title: string) => (
@@ -341,6 +518,56 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
     );
   };
 
+  const renderOrganizationModal = () => {
+    return (
+      <Modal
+        transparent
+        visible={organizationModal}
+        animationType="slide"
+        onRequestClose={() => setOrganizationModal(false)}>
+        <View style={StyleSheet.flatten([styles.modalBody, {backgroundColor: colors.card}])}>
+          <Text style={StyleSheet.flatten([styles.modalTitle, {color: colors.primary}])}>
+            Select Organization
+          </Text>
+          <FlatList
+            data={organizations}
+            style={[styles.modalList, {maxHeight: modalMaxHeight}]}
+            contentContainerStyle={styles.modalListContent}
+            showsVerticalScrollIndicator={true}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({item}) => (
+              <TouchableOpacity
+                style={[
+                  styles.modalOption,
+                  formData.organizationId === item.id.toString() && {
+                    backgroundColor: colors.primary,
+                  },
+                ]}
+                onPress={() => handleOrganizationSelect(item)}>
+                <Text
+                  style={StyleSheet.flatten([
+                    styles.modalOptionText,
+                    {color: colors.text},
+                    formData.organizationId === item.id.toString()
+                      ? {color: colors.white, fontWeight: '600'}
+                      : undefined,
+                  ])}>
+                  {item.name}
+                </Text>
+              </TouchableOpacity>
+            )}
+            keyExtractor={(item) => item.id.toString()}
+          />
+          <TouchableOpacity
+            style={[styles.modalCloseButton, {backgroundColor: colors.primary}]}
+            onPress={() => setOrganizationModal(false)}>
+            <Text style={styles.modalCloseButtonText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <Block safe style={[styles.container, {backgroundColor: colors.background}]}> 
       <View
@@ -371,12 +598,19 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           value={formData.institutionCode}
           onChangeText={value => handleInputChange('institutionCode', value)}
         />
-        <FormInput
-          label="Organization ID"
-          placeholder="Enter organization ID"
-          value={formData.organizationId}
-          onChangeText={value => handleInputChange('organizationId', value)}
-        />
+        <View style={{marginBottom: 16}}>
+          <Text style={{fontSize: 14, marginBottom: 8, color: '#000'}}>Organization *</Text>
+          <TouchableOpacity
+            style={[
+              styles.pickerButton,
+              {borderColor: '#ccc', backgroundColor: '#fff'},
+            ]}
+            onPress={() => setOrganizationModal(true)}>
+            <Text style={{color: formData.organizationId ? '#000' : '#999'}}>
+              {getSelectedOrganizationName()}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <FormInput
           label="GST"
           placeholder="Enter GST number"
@@ -417,7 +651,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           keyboardType="numeric"
         />
         <FormInput
-          label="Contact Number"
+          label="Contact Number *"
           placeholder="Enter contact number"
           value={formData.contactNumber}
           onChangeText={value => handleInputChange('contactNumber', value)}
@@ -461,6 +695,26 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           isPickerInput
           onPress={() => openPicker('defaultLanguage', LANGUAGES)}
         />
+        
+        {/* Logo Picker */}
+        <View style={{marginBottom: 16}}>
+          <Text style={{fontSize: 14, color: '#666', marginBottom: 6}}>Logo</Text>
+          <TouchableOpacity
+            style={styles.imagePickerButton}
+            onPress={pickImage}>
+            {formData.logo ? (
+              <View style={styles.imagePreviewContainer}>
+                <Image 
+                  source={{uri: formData.logo}} 
+                  style={styles.imagePreview}
+                />
+                <Text style={styles.imagePickerText}>Change Logo</Text>
+              </View>
+            ) : (
+              <Text style={styles.imagePickerText}>Choose Logo File</Text>
+            )}
+          </TouchableOpacity>
+        </View>
 
         {/* SECTION 3: Admin & Control */}
         {renderSectionTitle('Admin & Control')}
@@ -490,10 +744,20 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           value={formData.role}
           onChangeText={() => {}}
           isPickerInput
-          onPress={() => openPicker('role', ROLES)}
+          onPress={() => {
+            const moduleNames = availableModules.map(mod => mod.displayName || mod.name || '');
+            openPicker('role', moduleNames.length > 0 ? moduleNames : ['Database', 'Out Patient Department']);
+          }}
         />
+        <TouchableOpacity
+          style={styles.modulesButton}
+          onPress={() => setModulesModal(true)}>
+          <Text style={styles.modulesButtonText}>
+            Select Modules * ({formData.modules.length} selected)
+          </Text>
+        </TouchableOpacity>
         <FormInput
-          label="Status"
+          label="Status *"
           placeholder="Select status"
           value={formData.status}
           onChangeText={() => {}}
@@ -513,15 +777,15 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         />
         <FormInput
           label="PO Start Date"
-          placeholder="YYYY-MM-DD"
+          placeholder="mm/dd/yyyy"
           value={formData.poStartDate}
-          onChangeText={value => handleInputChange('poStartDate', value)}
+          onChangeText={(text) => formatDateInput(text, 'poStartDate' as keyof Institution)}
         />
         <FormInput
           label="PO End Date"
-          placeholder="YYYY-MM-DD"
+          placeholder="mm/dd/yyyy"
           value={formData.poEndDate}
-          onChangeText={value => handleInputChange('poEndDate', value)}
+          onChangeText={(text) => formatDateInput(text, 'poEndDate' as keyof Institution)}
         />
         <FormInput
           label="Subscription Plan"
@@ -535,7 +799,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
           style={styles.modulesButton}
           onPress={() => setModulesModal(true)}>
           <Text style={styles.modulesButtonText}>
-            Select Modules ({formData.modules.length} selected)
+            Select Modules * ({formData.modules.length} selected)
           </Text>
         </TouchableOpacity>
 
@@ -574,7 +838,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         />
         <FormInput
           label="Payment Status"
-          placeholder="Enter status"
+          placeholder="Select status"
           value={formData.paymentStatus}
           onChangeText={() => {}}
           isPickerInput
@@ -582,16 +846,17 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
         />
         <FormInput
           label="Payment Received"
-          placeholder="Enter amount received"
+          placeholder="Select option"
           value={formData.paymentReceived}
-          onChangeText={value => handleInputChange('paymentReceived', value)}
-          keyboardType="decimal-pad"
+          onChangeText={() => {}}
+          isPickerInput
+          onPress={() => openPicker('paymentReceived', PAYMENT_RECEIVED_OPTIONS)}
         />
         <FormInput
           label="Payment Date"
-          placeholder="YYYY-MM-DD"
+          placeholder="mm/dd/yyyy"
           value={formData.paymentDate}
-          onChangeText={value => handleInputChange('paymentDate', value)}
+          onChangeText={(text) => formatDateInput(text, 'paymentDate' as keyof Institution)}
         />
         <FormInput
           label="Transaction Reference"
@@ -652,6 +917,7 @@ const AddEditInstitutionScreen: React.FC<AddEditInstitutionScreenProps> = ({
 
       {renderPickerModal()}
       {renderModulesModal()}
+      {renderOrganizationModal()}
     </Block>
   );
 };
@@ -755,6 +1021,48 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#333',
     fontWeight: '500',
+  },
+  pickerButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+  },
+  modalCloseButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  imagePickerButton: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  imagePickerText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  imagePreviewContainer: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  imagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    resizeMode: 'cover',
   },
 });
 

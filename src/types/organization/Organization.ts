@@ -40,4 +40,5 @@ export interface Organization {
   pocEmail: string;
   pocContact: string;
   supportSLA: string;
+  isDeleted?: boolean;
 }
