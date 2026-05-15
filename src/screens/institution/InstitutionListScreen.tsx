@@ -40,6 +40,7 @@ const InstitutionListScreen: React.FC<InstitutionListScreenProps> = ({
     institutionName: inst.name || '',
     institutionCode: inst.code || '',
     organizationId: inst.organization_id || '',
+    organizationName: inst.organization?.name || '',
     gst: inst.gst_number || '',
     address: inst.address || '',
     city: inst.city || '',
@@ -255,11 +256,11 @@ const handleToggleStatus = async (institution: Institution) => {
         </Text>
       </View>
 
-      <View style={[styles.tableCell, styles.orgCell]}>
-        <Text style={styles.cellText} numberOfLines={1}>
-          {item?.organizationId || 'N/A'}
-        </Text>
-      </View>
+   <View style={[styles.tableCell, styles.orgCell]}>
+  <Text style={styles.cellText} numberOfLines={1}>
+    {item?.organizationName || 'N/A'}
+  </Text>
+</View>
 
       <View style={[styles.tableCell, styles.urlCell]}>
         <Text style={styles.cellText} numberOfLines={1}>
@@ -290,7 +291,7 @@ const handleToggleStatus = async (institution: Institution) => {
           onPress={() => handleEditInstitution(item)}>
           <Ionicons name="pencil" size={20} color="#FFC107" />
         </TouchableOpacity>
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={styles.iconBtn}
           onPress={() => handleToggleStatus(item)}>
           <Ionicons
@@ -298,7 +299,7 @@ const handleToggleStatus = async (institution: Institution) => {
             size={20}
             color={item.status === 'Active' ? '#4CAF50' : '#f44336'}
           />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
         <TouchableOpacity
           style={styles.iconBtn}
           onPress={() => handleDeleteInstitution(item)}>

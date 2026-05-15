@@ -54,7 +54,7 @@ export async function restoreInstitution(id: string) {
         // Try multiple endpoint patterns for restore
         const endpoints = [
             // Pattern 1: POST to /restore
-            async () => apiclient.post(`${endpoint.institutions}/${id}/restore`),
+            async () => apiclient.put(`${endpoint.institutions}/${id}/restore`),
             // Pattern 2: PUT with is_deleted: false
             async () => apiclient.put(`${endpoint.institutions}/${id}`, { is_deleted: false, deleted_at: null }),
             // Pattern 3: PATCH with is_deleted
@@ -101,6 +101,18 @@ export async function toggleInstitutionStatus(id: string) {
         return response.data;
     } catch (error) {
         console.error("Error toggling institution status:", error);
+        throw error;
+    }
+}
+export async function forceDeleteInstitution(id: string) {
+    try {
+        const response = await apiclient.delete(
+            `${endpoint.institutions}/${id}/force-delete`
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error("Error permanently deleting institution:", error);
         throw error;
     }
 }

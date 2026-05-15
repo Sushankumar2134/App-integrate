@@ -4,7 +4,7 @@ import {Organization} from '../../types/organization';
 import {Block, Text} from '../../components';
 import PrimaryButton from '../../components/PrimaryButton';
 import {useTheme} from '../../hooks';
-
+import {restoreOrganization} from '../../../api/organisation';
 interface DeletedOrganizationScreenProps {
   navigation: any;
   route: any;
@@ -22,34 +22,53 @@ const DeletedOrganizationScreen: React.FC<DeletedOrganizationScreenProps> = ({
   const deletedOrganizations = useMemo(() => {
     return organizations.filter(org => org.isDeleted);
   }, [organizations]);
+const handleRestore = (organization: Organization) => {
+  Alert.alert(
+    'Restore Organization',
+    `Restore "${organization.organizationName}"?`,
+    [
+      {text: 'Cancel', onPress: () => {}, style: 'cancel'},
+      {
+        text: 'Restore',
+        onPress: async () => {
+          try {
 
-  const handleRestore = (organization: Organization) => {
-    Alert.alert(
-      'Restore Organization',
-      `Restore "${organization.organizationName}"?`,
-      [
-        {text: 'Cancel', onPress: () => {}, style: 'cancel'},
-        {
-          text: 'Restore',
-          onPress: () => {
+            // Restore in backend
+            await restoreOrganization(organization.id);
+
+            // Update local state
             const restored = organizations.map(org =>
-              org.id === organization.id ? {...org, isDeleted: false} : org,
+              org.id === organization.id
+                ? {...org, isDeleted: false}
+                : org,
             );
+
             setOrganizations(restored);
-            
+
+            // Update parent screen
             if (route.params?.onRestore) {
               route.params.onRestore(restored);
             }
-            
-            Alert.alert('Success', 'Organization has been restored.', [
-              {text: 'OK'},
-            ]);
-          },
-        },
-      ],
-    );
-  };
 
+            Alert.alert(
+              'Success',
+              'Organization has been restored.',
+              [{text: 'OK'}],
+            );
+
+          } catch (error) {
+            console.error('Restore error:', error);
+
+            Alert.alert(
+              'Error',
+              'Failed to restore organization',
+            );
+          }
+        },
+      },
+    ],
+  );
+};
   const handlePermanentDelete = (organization: Organization) => {
     Alert.alert(
       'Permanent Delete',

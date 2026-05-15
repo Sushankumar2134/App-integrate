@@ -4,6 +4,10 @@ import {SystemModule} from '../../types/modules';
 import {Block, Text} from '../../components';
 import PrimaryButton from '../../components/PrimaryButton';
 import {useTheme} from '../../hooks';
+import {
+  restoreModule,
+  forceDeleteModule,
+} from '../../../api/module';
 
 interface DeletedModulesScreenProps {
   navigation: any;
@@ -22,168 +26,82 @@ const DeletedModulesScreen: React.FC<DeletedModulesScreenProps> = ({
   const deletedModules = useMemo(() => {
     return modules.filter(mod => mod.isDeleted);
   }, [modules]);
+const handleRestore = async (module: SystemModule) => {
+  Alert.alert(
+    'Restore Module',
+    `Restore "${module.displayName}"?`,
+    [
+      {text: 'Cancel', onPress: () => {}, style: 'cancel'},
+      {
+        text: 'Restore',
+        onPress: async () => {
+          try {
+            await restoreModule(module.id);
 
-  const handleRestore = async (module: SystemModule) => {
-    Alert.alert(
-      'Restore Module',
-      `Restore "${module.displayName}"?`,
-      [
-        {text: 'Cancel', onPress: () => {}, style: 'cancel'},
-        {
-          text: 'Restore',
-          onPress: async () => {
-            try {
-              let success = false;
-              
-              // Convert module to API format (snake_case)
-              const apiModule = {
-                id: module.id,
-                module_label: module.moduleLabel,
-                module_display_name: module.displayName,
-                display_name: module.displayName,
-                parent_module_id: module.parentModuleId,
-                parent_module: module.parentModuleId,
-                priority: module.priority,
-                icon: module.icon,
-                file_url: module.fileUrl,
-                page_name: module.pageName,
-                module_type: module.type,
-                type: module.type,
-                access_for: module.accessFor,
-                is_active: module.isActive ? 1 : 0,
-                status: module.isActive ? 'active' : 'inactive',
-              };
-              
-              // Try Pattern 1: POST /modules/{id}/restore
-              try {
-                const response1 = await fetch(`https://tamala-unsighing-quadrennially.ngrok-free.dev/api/modules/${module.id}/restore`, {
-                  method: 'POST',
-                  headers: {'Content-Type': 'application/json'},
-                });
-                if (response1.ok) {
-                  success = true;
-                  console.log('Restore Pattern 1 succeeded');
-                }
-              } catch (error) {
-                console.log('Pattern 1 failed, trying pattern 2');
-              }
+            const restored = modules.map(mod =>
+              mod.id === module.id
+                ? {...mod, isDeleted: false}
+                : mod,
+            );
 
-              // Try Pattern 2: PUT with is_deleted: false
-              if (!success) {
-                try {
-                  const response2 = await fetch(`https://tamala-unsighing-quadrennially.ngrok-free.dev/api/modules/${module.id}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                      ...apiModule,
-                      is_deleted: false,
-                    }),
-                  });
-                  if (response2.ok) {
-                    success = true;
-                    console.log('Restore Pattern 2 succeeded');
-                  }
-                } catch (error) {
-                  console.log('Pattern 2 failed, trying pattern 3');
-                }
-              }
+            setModules(restored);
 
-              // Try Pattern 3: PATCH with is_deleted
-              if (!success) {
-                try {
-                  const response3 = await fetch(`https://tamala-unsighing-quadrennially.ngrok-free.dev/api/modules/${module.id}`, {
-                    method: 'PATCH',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({is_deleted: false}),
-                  });
-                  if (response3.ok) {
-                    success = true;
-                    console.log('Restore Pattern 3 succeeded');
-                  }
-                } catch (error) {
-                  console.log('Pattern 3 failed, trying pattern 4');
-                }
-              }
-
-              // Try Pattern 4: PUT with full data
-              if (!success) {
-                try {
-                  const response4 = await fetch(`https://tamala-unsighing-quadrennially.ngrok-free.dev/api/modules/${module.id}`, {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                      ...apiModule,
-                      is_deleted: 0,
-                    }),
-                  });
-                  if (response4.ok) {
-                    success = true;
-                    console.log('Restore Pattern 4 succeeded');
-                  }
-                } catch (error) {
-                  console.log('All restore patterns failed');
-                }
-              }
-
-              if (success) {
-                const restored = modules.map(mod =>
-                  mod.id === module.id ? {...mod, isDeleted: false} : mod,
-                );
-                setModules(restored);
-                
-                if (route.params?.onRestore) {
-                  route.params.onRestore();
-                }
-                
-                Alert.alert('Success', 'Module has been restored.', [
-                  {text: 'OK'},
-                ]);
-              } else {
-                throw new Error('All restore attempts failed');
-              }
-            } catch (error) {
-              console.error('Error restoring module:', error);
-              Alert.alert('Error', 'Failed to restore module. Please try again.');
+            if (route.params?.onRestore) {
+              route.params.onRestore();
             }
-          },
+
+            Alert.alert(
+              'Success',
+              'Module has been restored.',
+              [{text: 'OK'}],
+            );
+          } catch (error) {
+            console.error('Error restoring module:', error);
+
+            Alert.alert(
+              'Error',
+              'Failed to restore module. Please try again.',
+            );
+          }
         },
-      ],
-    );
-  };
+      },
+    ],
+  );
+};const handlePermanentDelete = async (module: SystemModule) => {
+  Alert.alert(
+    'Permanent Delete',
+    `This will permanently delete "${module.displayName}". This action cannot be undone.`,
+    [
+      {text: 'Cancel', onPress: () => {}, style: 'cancel'},
+      {
+        text: 'Delete',
+        onPress: async () => {
+          try {
+            await forceDeleteModule(module.id);
 
-  const handlePermanentDelete = async (module: SystemModule) => {
-    Alert.alert(
-      'Permanent Delete',
-      `This will permanently delete "${module.displayName}". This action cannot be undone.`,
-      [
-        {text: 'Cancel', onPress: () => {}, style: 'cancel'},
-        {
-          text: 'Delete',
-          onPress: async () => {
-            try {
-              // Delete from API
-              const response = await fetch(`https://tamala-unsighing-quadrennially.ngrok-free.dev/api/modules/${module.id}`, {
-                method: 'DELETE',
-              });
+            const filtered = modules.filter(
+              mod => mod.id !== module.id,
+            );
 
-              if (response.ok) {
-                const filtered = modules.filter(mod => mod.id !== module.id);
-                setModules(filtered);
-                
-                if (route.params?.onDelete) {
-                  route.params.onDelete();
-                }
-                
-                Alert.alert('Success', 'Module has been permanently deleted.', [
-                  {text: 'OK'},
-                ]);
-              } else {
-                throw new Error('Failed to delete module');
-              }
-            } catch (error) {
-              console.error('Error deleting module:', error);
-              Alert.alert('Error', 'Failed to delete module. Please try again.');
+            setModules(filtered);
+
+            if (route.params?.onDelete) {
+              route.params.onDelete();
             }
+
+            Alert.alert(
+              'Success',
+              'Module has been permanently deleted.',
+              [{text: 'OK'}],
+            );
+          } catch (error) {
+            console.error('Error deleting module:', error);
+
+            Alert.alert(
+              'Error',
+              'Failed to delete module. Please try again.',
+            );
+          }
           },
           style: 'destructive',
         },

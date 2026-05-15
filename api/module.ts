@@ -11,7 +11,9 @@ const apiclient = axios.create({
 
 export async function fetchmodules() {
     try {
-        const response = await apiclient.get(endpoint.modules);
+        const response = await apiclient.get(
+  `${endpoint.modules}?platform=Both&access_for=institution`
+);
         return response.data; // Assuming the API returns data in the 'data' field
     } catch (error) {
         console.error("Error fetching modules:", error);
@@ -54,3 +56,28 @@ export async function deleteModule(id: string) {
             throw error;
         }
     }
+    export async function restoreModule(id: string) {
+    try {
+        const response = await apiclient.put(
+            `${endpoint.modules}/${id}/restore`
+        );
+
+        return response.data;
+    } catch (error) {
+        console.log("Module restore error");
+        return null;
+    }
+}
+
+export async function forceDeleteModule(id: string) {
+    try {
+        const response = await apiclient.delete(
+            `${endpoint.modules}/${id}/force-delete`
+        );
+
+        return response.data;
+    } catch (error) {
+        console.log("Module permanent delete error");
+        return null;
+    }
+}

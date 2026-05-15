@@ -34,7 +34,14 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
   const normalizeOrganization = (org: any): Organization => ({
     id: org.id,
     organizationName: org.name || '',
-    organizationType: org.type || '',
+organizationType:
+  org.type === 'private'
+    ? 'Private'
+    : org.type === 'trust'
+    ? 'Trust'
+    : org.type === 'government'
+    ? 'Government'
+    : org.type || 'Private',
     registrationNumber: org.registration_number || '',
     gst: org.gst_number || '',
     address: org.address || '',
@@ -54,7 +61,7 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
     adminName: org.admin_name || '',
     adminEmail: org.admin_email || '',
     adminMobile: org.admin_mobile || '',
-    status: org.status === 1 ? 'Active' : 'Inactive',
+    status: org.status ? 'Active' : 'Inactive',
     mouCopy: org.mou_copy || '',
     poNumber: org.po_number || '',
     poStartDate: org.po_start_date || '',
@@ -73,7 +80,7 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
     pocEmail: org.poc_email || '',
     pocContact: org.poc_contact || '',
     supportSLA: org.support_sla || '',
-    isDeleted: org.isDeleted || false,
+    isDeleted: !!org.deleted_at,
   });
 
   // ================= FETCH =================
@@ -185,43 +192,41 @@ const OrganizationListScreen: React.FC<OrganizationListScreenProps> = ({
   //     console.error('Error updating status:', error);
   //     Alert.alert('Error', 'Failed to update status');
   //   }
-  
-
   const handleDeleteOrganization = (organization: Organization) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to delete this organization?',
-      [
-        {text: 'Cancel', style: 'cancel'},
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await deleteOrganization(organization.id);
+  Alert.alert(
+    'Confirm Delete',
+    'Are you sure you want to delete this organization?',
+    [
+      {text: 'Cancel', style: 'cancel'},
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteOrganization(organization.id);
 
-              setOrganizations(prev =>
-                prev.map(org =>
-                  org.id === organization.id
-                    ? {...org, isDeleted: true}
-                    : org,
-                ),
-              );
+            // Move to deleted screen
+            setOrganizations(prev =>
+              prev.map(org =>
+                org.id === organization.id
+                  ? {...org, isDeleted: true}
+                  : org,
+              ),
+            );
 
-              Alert.alert(
-                'Success',
-                'Organization deleted',
-              );
-            } catch (error) {
-              console.error('Delete error:', error);
-              Alert.alert('Error', 'Failed to delete');
-            }
-          },
+            Alert.alert(
+              'Success',
+              'Organization deleted',
+            );
+          } catch (error) {
+            console.error('Delete error:', error);
+            Alert.alert('Error', 'Failed to delete');
+          }
         },
-      ],
-    );
-  };
-
+      },
+    ],
+  );
+};
   const handleViewDeleted = () => {
     const deletedOrgs = organizations.filter(org => org.isDeleted);
     navigation.navigate('DeletedOrganization', {

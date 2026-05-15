@@ -4,7 +4,10 @@ import {Institution} from '../../types/institution';
 import {Block, Text} from '../../components';
 import PrimaryButton from '../../components/PrimaryButton';
 import {useTheme} from '../../hooks';
-import {restoreInstitution, deleteInstitution} from '../../../api/institution';
+import {
+  restoreInstitution,
+  forceDeleteInstitution,
+} from '../../../api/institution';
 
 interface DeletedInstitutionScreenProps {
   navigation: any;
@@ -72,7 +75,7 @@ const DeletedInstitutionScreen: React.FC<DeletedInstitutionScreenProps> = ({
           onPress: async () => {
             try {
               // Call API to permanently delete the institution
-              await deleteInstitution(institution.id);
+         await forceDeleteInstitution(institution.id);
               
               // Update local state
               const filtered = institutions.filter(inst => inst.id !== institution.id);

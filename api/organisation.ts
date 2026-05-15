@@ -15,7 +15,7 @@ export async function fetchOrganizations() {
         return response.data; // Assuming the API returns data in the 'data' field
     } catch (error) {
         console.error("Error fetching organizations:", error);
-        throw error;
+        return null;
     }
 }
 
@@ -25,7 +25,7 @@ export async function createOrganization(organizationData:any) {
         return response.data; // Assuming the API returns the created organization in the 'data' field
     } catch (error) {
         console.error("Error creating organization:", error);
-        throw error;
+        return null;
     }
 }
 
@@ -35,7 +35,7 @@ export async function fetchOrganizationById(id: string) {
         return response.data; // Assuming the API returns the organization in the 'data' field
     } catch (error) {
         console.error("Error fetching organization by ID:", error);
-        throw error;
+        return null;
     }
 }
 export async function updateOrganization(id: string, organizationData: any) {
@@ -43,8 +43,11 @@ export async function updateOrganization(id: string, organizationData: any) {
         const response = await apiclient.put(`${endpoint.organizations}/${id}`, organizationData);
         return response.data; // Assuming the API returns the updated organization in the 'data' field
     } catch (error) {
-        console.error("Error updating organization:", error);
-        throw error;
+        console.log(
+  "Validation Error:",
+  JSON.stringify((error as any)?.response?.data, null, 2)
+);
+        return null;
     }
 }
 export async function deleteOrganization(id: string) {
@@ -53,11 +56,22 @@ export async function deleteOrganization(id: string) {
         return response.data; // Assuming the API returns a success message or the deleted organization in the 'data' field
     } catch (error) {
         console.error("Error deleting organization:", error);
-        throw error;
+        return null;
     }
 }
 export async function toggleOrganizationStatus(id: string) {
-  return apiclient.post(`${endpoint.organizations}/${id}/toggle-status`);
+  return apiclient.put(`${endpoint.organizations}/${id}/toggle-status`);
 }
+export async function restoreOrganization(id: string) {
+    try {
+        const response = await apiclient.put(
+            `${endpoint.organizations}/${id}/restore`
+        );
 
+        return response.data;
+    } catch (error) {
+        console.error("Error restoring organization:", error);
+        return null;
+    }
+}
 

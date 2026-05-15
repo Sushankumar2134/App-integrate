@@ -3,6 +3,7 @@ export interface Institution {
   institutionName: string;
   institutionCode: string;
   organizationId: string;
+  organizationName?: string;
   gst: string;
   address: string;
   city: string;

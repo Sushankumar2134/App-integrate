@@ -124,9 +124,14 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       setSaving(true);
       const payload = {
         name: formData.organizationName,
-        type: formData.organizationType,
+      type:
+  formData.organizationType === 'Private'
+    ? 'Private'
+    : formData.organizationType === 'Trust'
+    ? 'Trust'
+    : 'Government',
         registration_number: formData.registrationNumber,
-        gst_number: formData.gst,
+      gst: formData.gst,
         address: formData.address,
         city: formData.city,
         state: formData.state,
@@ -149,6 +154,7 @@ const AddEditOrganizationScreen: React.FC<AddEditOrganizationScreenProps> = ({
       };
 
       if (isEditMode && formData.id) {
+        console.log("UPDATE PAYLOAD", payload);
         await updateOrganization(formData.id, payload);
       } else {
         await createOrganization(payload);
